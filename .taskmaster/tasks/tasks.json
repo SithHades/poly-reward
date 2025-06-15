@@ -1,0 +1,147 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Setup Project Repository and Dependencies",
+        "description": "Initialize the Python project structure with proper dependency management using uv and create the foundational project files",
+        "details": "Create project directory structure with src/, tests/, and config/ folders. Initialize pyproject.toml with Python 3.13.3 requirement. Use `uv add py_clob_client aiohttp PyYAML dependency-injector` to install required dependencies. Create requirements.txt file. Set up basic .gitignore for Python projects. Create initial README.md with project overview and setup instructions.",
+        "testStrategy": "Verify project structure is created correctly, dependencies are installed without conflicts, and Python 3.13.3 compatibility is maintained. Test that all required packages can be imported successfully.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "Implement PolymarketClient Class",
+        "description": "Create a robust API client class to handle all Polymarket API interactions with rate limiting, error handling, and exponential backoff",
+        "details": "Implement PolymarketClient class using py_clob_client as the foundation. Add methods for: get_market_data(), place_order(), cancel_order(), get_order_status(), get_positions(). Implement rate limiting (respect API limits), exponential backoff for retries, comprehensive error handling for network issues and API errors. Add logging for all API calls. Include paper trading mode flag to log actions without executing trades.",
+        "testStrategy": "Unit tests for each API method with mocked responses. Integration tests with Polymarket testnet if available. Test rate limiting behavior, error handling scenarios, and paper trading mode functionality. Verify exponential backoff works correctly on API failures.",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 3,
+        "title": "Create Data Models",
+        "description": "Define Python data classes for Market, Order, and Position to represent core trading entities",
+        "details": "Create data classes using Python's dataclass decorator: Market (id, name, current_price, volume, bid, ask), Order (id, market_id, side, price, size, status, timestamp), Position (market_id, size, entry_price, current_value, pnl). Include validation methods and serialization/deserialization for JSON persistence. Add utility methods for calculating P&L and position values.",
+        "testStrategy": "Unit tests for data class creation, validation, and serialization. Test edge cases like negative positions, zero prices. Verify JSON serialization round-trip works correctly for all models.",
+        "priority": "medium",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 4,
+        "title": "Implement Basic Strategy Engine",
+        "description": "Create a simple fixed-spread strategy class that calculates target bid/ask prices based on current market conditions",
+        "details": "Implement Strategy class with calculate_target_prices() method. Start with fixed-spread strategy: maintain 2% spread around current market price (bid = current_price * 0.99, ask = current_price * 1.01). Include configurable spread percentage. Add validation to ensure bid < ask and prices are within reasonable bounds. Include position size calculation based on available capital and risk limits.",
+        "testStrategy": "Unit tests with various market price scenarios. Test spread calculation accuracy, boundary conditions (very low/high prices), and position sizing logic. Verify strategy respects risk parameters and produces valid bid/ask prices.",
+        "priority": "medium",
+        "dependencies": [
+          3
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 5,
+        "title": "Build Portfolio Tracking System",
+        "description": "Create an in-memory portfolio management system to track positions, P&L, and implement basic risk controls",
+        "details": "Implement Portfolio class with methods: update_position(), calculate_total_pnl(), check_risk_limits(), get_available_capital(). Track positions across markets, calculate unrealized P&L, implement max exposure limits and stop-loss thresholds. Include portfolio-wide risk checks that halt trading if limits are breached. Add methods for portfolio serialization for persistence.",
+        "testStrategy": "Unit tests for position tracking, P&L calculations, and risk limit enforcement. Test scenarios with multiple positions, winning/losing trades, and risk limit breaches. Verify portfolio state consistency after various trading operations.",
+        "priority": "medium",
+        "dependencies": [
+          3
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 6,
+        "title": "Develop OrderManager Class",
+        "description": "Create order lifecycle management system to place, monitor, and cancel orders with proper state tracking",
+        "details": "Implement OrderManager class with methods: place_order(), cancel_order(), update_order_status(), manage_order_lifecycle(). Track active orders, handle partial fills, manage order replacements for spread maintenance. Include order validation, duplicate prevention, and automatic cancellation of stale orders. Integrate with PolymarketClient for order execution and Strategy for price targets.",
+        "testStrategy": "Unit tests for order placement, cancellation, and status updates. Integration tests with mocked API responses for various order states. Test order lifecycle management, partial fills handling, and error scenarios like failed placements or cancellations.",
+        "priority": "high",
+        "dependencies": [
+          2,
+          3,
+          4
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 7,
+        "title": "Create Configuration Management",
+        "description": "Implement YAML-based configuration system for bot parameters, market selection, and risk settings",
+        "details": "Create config.yaml structure with sections for: api_settings (endpoints, rate limits), trading_params (spread_percentage, position_size), risk_management (max_exposure, stop_loss), markets (list of market_ids to trade), logging_config. Implement ConfigManager class to load, validate, and provide configuration values. Include environment variable overrides for sensitive data like API keys.",
+        "testStrategy": "Unit tests for configuration loading, validation, and default value handling. Test invalid configuration scenarios and environment variable overrides. Verify all configuration parameters are properly typed and validated.",
+        "priority": "medium",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 8,
+        "title": "Build Main Bot Loop and Integration",
+        "description": "Create the main bot.py executable that integrates all components into a single-market trading loop with console logging",
+        "details": "Implement bot.py main script with: initialization of all components, main trading loop for single market monitoring, order placement and management cycle, portfolio updates, console logging for all actions. Include graceful shutdown handling, signal handlers for CTRL+C, and basic error recovery. Start with hardcoded single market for MVP, with clear structure for multi-market expansion.",
+        "testStrategy": "Integration tests with all components working together. Test main loop execution, error handling, graceful shutdown, and logging output. Run extended tests in paper trading mode to verify system stability and correct behavior over time.",
+        "priority": "high",
+        "dependencies": [
+          2,
+          4,
+          5,
+          6,
+          7
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 9,
+        "title": "Implement State Persistence",
+        "description": "Add functionality to save and restore bot state (positions, orders, P&L) to/from local JSON file for restart capability",
+        "details": "Implement StateManager class with save_state() and load_state() methods. Serialize portfolio positions, active orders, and P&L history to state.json file. Add automatic state saving on shutdown and periodic saves during operation. Include state validation on load to ensure data integrity. Handle missing or corrupted state files gracefully with appropriate fallbacks.",
+        "testStrategy": "Unit tests for state serialization/deserialization. Test state persistence across bot restarts, handling of corrupted state files, and data integrity validation. Verify portfolio continuity after restart with various position scenarios.",
+        "priority": "medium",
+        "dependencies": [
+          5,
+          8
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 10,
+        "title": "Add Multi-Market Support and Comprehensive Testing",
+        "description": "Extend the bot to handle multiple markets concurrently and implement comprehensive testing suite including paper trading validation",
+        "details": "Refactor main loop to handle list of markets from configuration. Implement concurrent market monitoring using asyncio or threading. Add portfolio-wide risk management across all markets. Create comprehensive test suite including unit tests, integration tests, and end-to-end paper trading tests. Add performance monitoring and metrics collection. Include documentation for deployment and operation.",
+        "testStrategy": "End-to-end testing with multiple markets in paper trading mode. Performance tests for concurrent market handling. Stress tests with high-frequency market updates. Validate portfolio-wide risk management and cross-market position tracking accuracy.",
+        "priority": "medium",
+        "dependencies": [
+          8,
+          9
+        ],
+        "status": "pending",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "created": "2025-06-15T21:08:19.479Z",
+      "updated": "2025-06-15T21:08:19.479Z",
+      "description": "Tasks for master context"
+    }
+  }
+}

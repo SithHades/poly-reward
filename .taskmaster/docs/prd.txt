@@ -1,0 +1,89 @@
+<context>
+# Overview  
+The Polymarket Liquidity Provider Bot is an automated trading system designed to earn rewards by providing market-making services on Polymarket prediction markets. The system monitors betting markets, places strategic bid/ask orders to provide liquidity, and manages positions to capture spreads while participating in Polymarket's liquidity reward programs.
+Problem it solves: Manual market making on prediction markets is time-intensive and requires constant monitoring. Many profitable liquidity opportunities are missed due to human reaction times and availability constraints.
+Target users: Quantitative traders, crypto funds, and individual traders with technical expertise who want to earn yield through systematic market making on prediction markets.
+Value proposition: Automated 24/7 liquidity provision with risk management, position tracking, and optimized reward capture from Polymarket's incentive programs.
+
+# Core Features  
+- Market Monitoring:
+    - What it does: Scans Polymarket for specified markets to track real-time price movements and volume.
+    - Why it's important: Identifies liquidity opportunities and provides the data needed for the bot to react.
+    - How it works: A simple polling mechanism using the Polymarket API to fetch data for a configurable list of market IDs.
+- Automated Order Management:
+    - What it does: Places, monitors, and cancels bid/ask orders to maintain a desired spread.
+    - Why it's important: This is the core mechanism for providing liquidity, capturing spreads, and earning platform rewards.
+    - How it works: An event-driven loop that executes trades based on the strategy engine's signals and adjusts orders based on market fills.
+- Basic Strategy Engine:
+    - What it does: Calculates target bid/ask prices based on simple, predefined rules.
+    - Why it's important: Maximizes profitability while controlling risk.
+    - How it works: Starts with a simple, fixed-spread strategy (e.g., maintain a 2% spread around the current market price).
+- Portfolio & Risk Management:
+    - What it does: Tracks current positions and overall P&L. Implements basic risk controls.
+    - Why it's important: Prevents significant losses and ensures the bot operates within defined capital limits.
+    - How it works: An in-memory ledger that updates with every trade. Halts trading if a max exposure or loss limit is breached.
+
+</context>
+<PRD>
+# Technical Architecture  
+- System Components: A single, monolithic Python application.
+    - PolymarketClient: A class to handle all API interactions (rate limiting, error handling).
+    - Strategy: A class that contains the pricing logic.
+    - OrderManager: A class to manage the lifecycle of orders.
+    - Portfolio: A class to track positions and P&L.
+    - bot.py: The main executable script that initializes and runs the core loop.
+- Data Models: Simple in-memory Python objects or data classes for Market, Order, and Position.
+- APIs and Integrations: The Polymarket REST API is the only external integration. Can be interacted with either via REST API or py_clob_client.
+- Infrastructure Requirements:
+    - Runs on a local machine or a single small VPS.
+    - Persistence will be handled by writing state to a local file (e.g., JSON or SQLite) on shutdown.
+    - Dependencies managed via a requirements.txt file, pyproject.toml and uv (add dependencies with `uv add <dependency`).
+
+# Development Roadmap  
+- Phase 1: Core MVP (Foundation)
+    - Scope: Automated market-making for a single, hardcoded market.
+    - Components:
+        - Polymarket API client.
+        - Fixed-spread strategy engine.
+        - Basic order management (place/cancel).
+        - In-memory portfolio tracking.
+        - Console logging for all actions.
+        - Configuration via a single YAML file.
+    - Deliverable: A script that can run, monitor one market, maintain a bid/ask spread, and track P&L until manually stopped.
+
+- Phase 2: Multi-Market & Persistence
+    - Scope: Scale to handle multiple markets concurrently and persist state.
+    - Components:
+        - Update configuration to accept a list of markets.
+        - Refactor the core loop to manage multiple markets.
+        - Implement state saving/loading from a local file (e.g., state.json).
+        - Portfolio-wide risk checks (total exposure across all markets).
+    - Deliverable: A bot that can run across several markets and can be safely restarted without losing its position data.
+
+# Logical Dependency Chain
+1. Foundation Layer: Build the PolymarketClient to ensure reliable communication.
+2. Core Logic: Implement the OrderManager and a simple Strategy to place a single liquidity providing order.
+3. State Management: Create the in-memory Portfolio tracker.
+4. Usable System (MVP): Combine the above into a single script (bot.py) that runs the main loop for one market, configured via a YAML file, with all output directed to the console. This is the fastest path to a functional tool.
+5. Scaling: Generalize the main loop and configuration to handle a list of markets.
+
+
+# Risks and Mitigations  
+- Technical Challenges:
+    - Risk: API rate limiting or downtime.
+    - Mitigation: Implement robust error handling, exponential backoff, and rate limiters in the PolymarketClient from the start.
+- MVP Definition:
+    - Risk: Over-engineering the MVP.
+    - Mitigation: Strictly adhere to the Phase 1 scope. Focus entirely on a single-market, console-only tool to prove the core trading logic works. Using the py_clob_client where possible, as it implements most of the functionalities for our API client.
+- Resource Constraints:
+    - Risk: Insufficient testing leading to financial loss.
+    - Mitigation: Create a "paper trading" mode that logs intended actions without executing them. Run in this mode extensively before deploying capital.
+
+# Appendix
+- Research Findings:
+    - Liquidity rewards are a key driver of profitability
+- Technical Specifications:
+    - Language: Python 3.13.3
+    - Key Libraries: py_clob_client, aiohttp, PyYAML, dependency-injector.
+    - Deployment: Local machine or a single Docker container on a VPS.
+</PRD>
