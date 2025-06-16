@@ -3,7 +3,7 @@ import time
 import logging
 from typing import Any, Optional, Dict, List
 from py_clob_client.client import ClobClient
-from py_clob_client.clob_types import OrderArgs, OrderType
+from py_clob_client.clob_types import BookParams, OrderArgs, OrderType
 from py_clob_client.order_builder.constants import BUY, SELL
 from py_clob_client.constants import POLYGON
 from src.api_models import Market, Rewards, RewardRate, Token
@@ -54,11 +54,10 @@ class PolymarketClient:
                 time.sleep(delay)
                 delay *= 2
 
-    def get_market_data(self, market_id: str) -> Any:
-        """Fetch market data for a given market_id."""
-        self.logger.info(f"Fetching market data for {market_id}")
-        # Placeholder: Replace with actual API call
-        return self._with_backoff(self.client.get_market, market_id)
+    def get_market_data(self, condition_id: str) -> Any:
+        """Fetch market data for a given condition_id."""
+        self.logger.info(f"Fetching market data for {condition_id}")
+        return self._with_backoff(self.client.get_market, condition_id)
 
     def place_order(self, price: float, size: float, side: str, token_id: str, order_type: OrderType = OrderType.GTC) -> Any:
         """Place an order on the market."""
@@ -93,7 +92,7 @@ class PolymarketClient:
         # Placeholder: Replace with actual API call if available
         return self._with_backoff(self.client.get_positions, user_address) if hasattr(self.client, "get_positions") else None
     
-    def get_sampling_markets(self, next_cursor: Optional[str] = None, limit: int = 100) -> Dict[str, Any]:
+    def get_sampling_markets(self, next_cursor: Optional[str] = None, limit: int = 500) -> Dict[str, Any]:
         """
         Fetch sampling markets with reward information for liquidity provision screening.
         
@@ -117,7 +116,7 @@ class PolymarketClient:
         try:
             # Check if the client has the sampling markets method
             if hasattr(self.client, 'get_sampling_markets'):
-                params = {'limit': limit}
+                params = dict()
                 if next_cursor:
                     params['cursor'] = next_cursor
                 return self._with_backoff(self.client.get_sampling_markets, **params)
@@ -136,6 +135,35 @@ class PolymarketClient:
                 "count": 0
             }
     
+    def sort_orderbooks(self, orderbooks: List[Dict[str, Any]] | Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Sort orderbooks by price.
+        
+        Args:
+            orderbooks: List of orderbooks to sort
+        """
+        rlist = True
+        if isinstance(orderbooks, dict):
+            orderbooks = [orderbooks]
+            rlist = False
+        for entry in orderbooks:
+            entry['bids'] = sorted(
+                entry['bids'], key=lambda x: float(x['price']), reverse=True
+            )
+            entry['asks'] = sorted(
+                entry['asks'], key=lambda x: float(x['price'])
+            )
+        return orderbooks if rlist else orderbooks[0]
+    
+    def get_orderbooks(self, token_ids: List[str]) -> List[Dict[str, Any]]:
+        """
+        Get orderbooks for a list of token IDs.
+        
+        Args:
+            token_ids: List of token IDs to get orderbooks for
+        """
+        return self.sort_orderbooks(self._with_backoff(self.client.get_order_books, [BookParams(token_id=token_id) for token_id in token_ids]))
+
     def get_orderbook(self, token_id: str) -> Dict[str, Any]:
         """
         Get orderbook for a specific token.
@@ -149,17 +177,17 @@ class PolymarketClient:
         self.logger.info(f"Fetching orderbook for token {token_id}")
         
         if self.paper_trading:
-            return self._get_mock_orderbook(token_id)
+            return self.sort_orderbooks(self._get_mock_orderbook(token_id))
         
         try:
-            return self._with_backoff(self.client.get_order_book, token_id)
+            return self.sort_orderbooks(self._with_backoff(self.client.get_order_book, token_id))
         except Exception as e:
             self.logger.error(f"Error fetching orderbook for {token_id}: {e}")
             return {"bids": [], "asks": []}
     
-    def get_midpoint(self, token_id: str) -> float:
+    def calculate_midpoint(self, token_id: str) -> float:
         """
-        Get current midpoint price for a token.
+        Calculate current midpoint price for a token.
         
         Args:
             token_id: The token ID to get midpoint for
@@ -174,6 +202,10 @@ class PolymarketClient:
             
             if not bids or not asks:
                 self.logger.warning(f"Incomplete orderbook for {token_id}")
+                if bids:
+                    return float(bids[0].get("price", 0))
+                elif asks:
+                    return float(asks[0].get("price", 1))
                 return 0.5  # Default midpoint
             
             best_bid = float(bids[0].get("price", 0))
@@ -184,6 +216,30 @@ class PolymarketClient:
         except Exception as e:
             self.logger.error(f"Error calculating midpoint for {token_id}: {e}")
             return 0.5
+    
+    def get_midpoint(self, token_id: str) -> float:
+        """
+        Get current midpoint price for a token.
+        
+        Args:
+            token_id: The token ID to get midpoint for
+        
+        Returns:
+            Current midpoint price
+        """
+        return self.client.get_midpoint(token_id)
+            
+    def get_midpoints(self, token_ids: List[str]) -> Dict[str, float]:
+        """
+        Get midpoints for a list of token IDs.
+        
+        Args:
+            token_ids: List of token IDs to get midpoints for
+        
+        Returns:
+            Dict mapping token_id to midpoint price
+        """
+        return self.client.get_midpoints(params=[BookParams(token_id=token_id) for token_id in token_ids])
     
     def _get_mock_sampling_markets(self, limit: int) -> Dict[str, Any]:
         """Generate mock sampling markets data for testing"""
@@ -277,7 +333,7 @@ class PolymarketClient:
                 # Filter and format for reward-eligible markets
                 # This would need to be implemented based on available market data
                 return {
-                    "data": markets_data[:limit] if isinstance(markets_data, list) else [],
+                    "data": markets_data.data[:limit] if hasattr(markets_data, 'data') and isinstance(markets_data.data, list) else [],
                     "next_cursor": None,
                     "limit": limit,
                     "count": min(len(markets_data) if isinstance(markets_data, list) else 0, limit)
