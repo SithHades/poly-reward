@@ -1,0 +1,26 @@
+{
+  "folders": [
+    {
+      "path": "."
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/__pycache__": true,
+      "**/.venv": true,
+      "**/.env": true
+    },
+    "search.exclude": {
+      "**/__pycache__": true,
+      "**/.venv": true,
+      "**/.env": true
+    },
+    "python.envFile": "${workspaceFolder}/.env"
+  },
+  "extensions": {
+    "recommendations": [
+      "ms-python.python",
+      "ms-python.ruff-formatter"
+    ]
+  }
+}
