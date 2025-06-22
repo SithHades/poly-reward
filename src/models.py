@@ -1,206 +1,130 @@
-from dataclasses import dataclass, field
-from typing import Dict, Any
 from decimal import Decimal
-from datetime import datetime, timezone
-import json
 from enum import Enum
+from typing import Annotated, Optional
+
+from pydantic import BaseModel, Field, field_validator
+
+Token = str  # string identifier for a token, mostly representing a market side like "Yes", or "Up"
+
+Midpoint = Decimal  # the midpoint price of a market side.
+Spread = Decimal
 
 
-class OrderSide(Enum):
-    BUY = "buy"
-    SELL = "sell"
+class OrderStatus(str, Enum):
+    LIVE = "LIVE"
+    FILLED = "FILLED"
+    CANCELLED = "CANCELLED"
+    EXPIRED = "EXPIRED"
 
 
-class OrderStatus(Enum):
-    PENDING = "pending"
-    OPEN = "open"
-    FILLED = "filled"
-    CANCELLED = "cancelled"
-    PARTIALLY_FILLED = "partially_filled"
+class BookSide(str, Enum):
+    BUY = "BUY"
+    SELL = "SELL"
 
 
-@dataclass
-class Market:
-    id: str
-    name: str
-    current_price: Decimal
-    volume: Decimal
-    bid: Decimal
-    ask: Decimal
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    
-    def __post_init__(self):
-        if self.current_price < 0:
-            raise ValueError("Current price cannot be negative")
-        if self.volume < 0:
-            raise ValueError("Volume cannot be negative")
-        if self.bid < 0:
-            raise ValueError("Bid cannot be negative")
-        if self.ask < 0:
-            raise ValueError("Ask cannot be negative")
-        if self.bid > self.ask:
-            raise ValueError("Bid cannot be greater than ask")
-    
-    def spread(self) -> Decimal:
-        return self.ask - self.bid
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "id": self.id,
-            "name": self.name,
-            "current_price": str(self.current_price),
-            "volume": str(self.volume),
-            "bid": str(self.bid),
-            "ask": str(self.ask),
-            "metadata": self.metadata
-        }
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Market":
-        return cls(
-            id=data["id"],
-            name=data["name"],
-            current_price=Decimal(data["current_price"]),
-            volume=Decimal(data["volume"]),
-            bid=Decimal(data["bid"]),
-            ask=Decimal(data["ask"]),
-            metadata=data.get("metadata", {})
-        )
-    
-    def to_json(self) -> str:
-        return json.dumps(self.to_dict())
-    
-    @classmethod
-    def from_json(cls, json_str: str) -> "Market":
-        return cls.from_dict(json.loads(json_str))
+SidePriceMap = dict[
+    BookSide, Decimal
+]  # mapping from BookSide to price for a given token
+PricesResponse = dict[Token, SidePriceMap]  # mapping from token_id to SidePriceMap
 
 
-@dataclass
-class Order:
-    id: str
-    market_id: str
-    side: OrderSide
-    price: Decimal
-    size: Decimal
-    status: OrderStatus
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    filled_size: Decimal = field(default=Decimal("0"))
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    
-    def __post_init__(self):
-        if self.price <= 0:
-            raise ValueError("Price must be positive")
-        if self.size <= 0:
-            raise ValueError("Size must be positive")
-        if self.filled_size < 0:
-            raise ValueError("Filled size cannot be negative")
-        if self.filled_size > self.size:
-            raise ValueError("Filled size cannot exceed order size")
-    
-    def remaining_size(self) -> Decimal:
-        return self.size - self.filled_size
-    
-    def is_filled(self) -> bool:
-        return self.filled_size == self.size
-    
-    def fill_percentage(self) -> Decimal:
-        if self.size == 0:
-            return Decimal("0")
-        return (self.filled_size / self.size) * 100
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "id": self.id,
-            "market_id": self.market_id,
-            "side": self.side.value,
-            "price": str(self.price),
-            "size": str(self.size),
-            "status": self.status.value,
-            "timestamp": self.timestamp.isoformat(),
-            "filled_size": str(self.filled_size),
-            "metadata": self.metadata
-        }
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Order":
-        return cls(
-            id=data["id"],
-            market_id=data["market_id"],
-            side=OrderSide(data["side"]),
-            price=Decimal(data["price"]),
-            size=Decimal(data["size"]),
-            status=OrderStatus(data["status"]),
-            timestamp=datetime.fromisoformat(data["timestamp"]),
-            filled_size=Decimal(data["filled_size"]),
-            metadata=data.get("metadata", {})
-        )
-    
-    def to_json(self) -> str:
-        return json.dumps(self.to_dict())
-    
-    @classmethod
-    def from_json(cls, json_str: str) -> "Order":
-        return cls.from_dict(json.loads(json_str))
+class OrderArgsModel(BaseModel):
+    token_id: Annotated[Token, Field(description="TokenID of the order")]
+    price: Annotated[
+        Decimal,
+        Field(description="Price used to create the order", default_factory=Decimal),
+    ]
+    size: Annotated[
+        Decimal, Field(description="Size of the order", default_factory=Decimal)
+    ]
+    side: Annotated[BookSide, Field(description="Side of the order (buy/sell)")]
 
 
-@dataclass
-class Position:
-    market_id: str
-    size: Decimal
-    entry_price: Decimal
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    
-    def __post_init__(self):
-        if self.entry_price <= 0:
-            raise ValueError("Entry price must be positive")
-    
-    def current_value(self, current_price: Decimal) -> Decimal:
-        return abs(self.size) * current_price
-    
-    def pnl(self, current_price: Decimal) -> Decimal:
-        if self.size == 0:
-            return Decimal("0")
-        if self.size > 0:  # Long position
-            return self.size * (current_price - self.entry_price)
-        else:  # Short position
-            return abs(self.size) * (self.entry_price - current_price)
-    
-    def pnl_percentage(self, current_price: Decimal) -> Decimal:
-        if self.entry_price == 0:
-            return Decimal("0")
-        pnl_value = self.pnl(current_price)
-        entry_value = abs(self.size) * self.entry_price
-        return (pnl_value / entry_value) * 100
-    
-    def is_long(self) -> bool:
-        return self.size > 0
-    
-    def is_short(self) -> bool:
-        return self.size < 0
-    
-    def is_flat(self) -> bool:
-        return self.size == 0
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "market_id": self.market_id,
-            "size": str(self.size),
-            "entry_price": str(self.entry_price),
-            "metadata": self.metadata
-        }
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Position":
-        return cls(
-            market_id=data["market_id"],
-            size=Decimal(data["size"]),
-            entry_price=Decimal(data["entry_price"]),
-            metadata=data.get("metadata", {})
-        )
-    
-    def to_json(self) -> str:
-        return json.dumps(self.to_dict())
-    
-    @classmethod
-    def from_json(cls, json_str: str) -> "Position":
-        return cls.from_dict(json.loads(json_str))
+class OrderDetails(BaseModel):
+    order_id: Annotated[str, Field(alias="id", description="Id of the order")]
+    status: Annotated[OrderStatus, Field(description="Status of the order")]
+    owner: Annotated[str, Field(description="Owner UUID")]
+    maker_address: Annotated[str, Field(description="Ethereum address of the maker")]
+    market_id: Annotated[
+        str,
+        Field(alias="market", description="Market address where the order is placed"),
+    ]
+    asset_id: Annotated[
+        Token, Field(description="Unique asset identifier, represents the side/token")
+    ]
+    side: Annotated[BookSide, Field(description="Side of the order (BUY or SELL)")]
+    original_size: Annotated[
+        int, Field(gt=0, description="Total size of the order in shares")
+    ]
+    matched_size: Annotated[
+        int, Field(alias="size_matched", ge=0, description="Matched size in shares")
+    ]
+    price: Annotated[Decimal, Field(description="Order price in decimal format")]
+    expiration: Annotated[
+        int, Field(description="Expiration time in UNIX timestamp, 0 if no expiry")
+    ] = 0
+    order_type: Annotated[str, Field(description="Type of order (e.g., GTC)")]
+    created_at: Annotated[int, Field(description="Timestamp of order creation")]
+    associate_trades: Annotated[
+        list, Field(description="List of associated trades")
+    ] = []
+
+    @field_validator("price", mode="before")
+    def parse_price(cls, v):
+        return Decimal(v)
+
+    @field_validator("original_size", mode="before")
+    def parse_original_size(cls, v):
+        return int(v)
+
+    class Config:
+        validate_by_name = True
+
+
+class TokenInfo(BaseModel):
+    token_id: str  # equals asset_id in most cases.
+    outcome: str  # the outcome of the token, e.g., "Yes", "No", "Up", "Down"
+    price: float
+    winner: Optional[bool] = None
+
+
+class Rewards(BaseModel):
+    rewards_daily_rate: float
+    min_size: float
+    max_spread: float
+
+
+class Market(BaseModel):
+    enable_order_book: bool
+    active: bool
+    closed: bool
+    archived: bool
+    accepting_orders: bool
+    minimum_order_size: float
+    minimum_tick_size: float
+    condition_id: str  # ID of the market
+    question_id: str
+    question: str
+    description: str
+    market_slug: str
+    end_date_iso: Optional[str] = None
+    maker_base_fee: float
+    taker_base_fee: float
+    notifications_enabled: bool
+    neg_risk: bool
+    neg_risk_market_id: str
+    neg_risk_request_id: str
+    rewards: Optional[Rewards] = None
+    is_50_50_outcome: bool
+    tokens: list[TokenInfo]
+    tags: Optional[list[str]] = None
+
+
+class SimplifiedMarket(BaseModel):
+    condition_id: str
+    rewards: Optional[Rewards] = None
+    tokens: list[TokenInfo]
+    active: bool
+    closed: bool
+    archived: bool
+    accepting_orders: bool
