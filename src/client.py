@@ -54,10 +54,8 @@ class Client:
         host: str = "https://clob.polymarket.com",
         key: Optional[str] = None,
         address: Optional[str] = None,
-        paper_trading: bool = False,
     ):
         self.logger = logging.getLogger("Client")
-        self.paper_trading = paper_trading
         client = ClobClient(
             host,
             key=key or os.getenv("PK"),
