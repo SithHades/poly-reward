@@ -19,6 +19,7 @@ from py_clob_client.clob_types import (
 from py_clob_client.constants import POLYGON
 from py_clob_client.exceptions import PolyApiException
 from py_clob_client.order_builder.builder import BUY, SELL
+from ratelimit import limits, sleep_and_retry
 
 from src.parsing_utils import map_market, map_simplified_market
 from src.constants import DEFAULT_MIDPOINT, DEFAULT_SPREAD, DEFAULT_TICK_SIZE
@@ -29,11 +30,22 @@ from src.models import (
     OrderArgsModel,
     OrderDetails,
     PricesResponse,
-    Rewards,
     SimplifiedMarket,
     Spread,
     Token,
 )
+
+
+def rate_limited(calls, period):
+    def decorator(func):
+        @sleep_and_retry
+        @limits(calls=calls, period=period)
+        def wrapper(*args, **kwargs):
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
 
 
 class Client:
@@ -46,13 +58,38 @@ class Client:
     ):
         self.logger = logging.getLogger("Client")
         self.paper_trading = paper_trading
-        self.client = ClobClient(
+        client = ClobClient(
             host,
             key=key or os.getenv("PK"),
             chain_id=POLYGON,
             signature_type=1,
             funder=address or os.getenv("BROWSER_ADDRESS"),
         )
+
+        rate_limits = {
+            "get_order_book": (50, 10),
+            "get_order_books": (50, 10),
+            "get_price": (100, 10),
+            "get_prices": (100, 10),
+            "get_sampling_markets": (50, 10),
+            "get_sampling_simplified_markets": (50, 10),
+            "get_markets": (50, 10),
+            "get_simplified_markets": (50, 10),
+            "post_order": (500, 10),
+            "post_orders": (500, 10),
+            "cancel_order": (500, 10),
+            "cancel_orders": (500, 10),
+            "cancel_all": (500, 10),
+        }
+
+        # Apply rate limits to client methods
+        for method_name, (calls, period) in rate_limits.items():
+            original_method = getattr(client, method_name)
+            wrapped_method = rate_limited(calls, period)(original_method)
+            setattr(client, method_name, wrapped_method)
+
+        self.client = client
+
         self.client.set_api_creds(self.client.create_or_derive_api_creds())
 
     def get_midpoint(self, token: Token) -> Midpoint:
