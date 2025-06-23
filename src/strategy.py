@@ -69,7 +69,30 @@ class VolatilityMetrics:
     spread_changes: List[Decimal] = field(default_factory=list)
     volume_spikes: List[Decimal] = field(default_factory=list)
     last_update: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    window_minutes: int = 5
+    window: int = 50
+    snapshots: List["OrderbookSnapshot"] = field(default_factory=list)  # Store recent snapshots
+
+    def add_snapshot(self, snapshot: OrderbookSnapshot):
+        """Add a new orderbook snapshot and update volatility metrics"""
+        if self.snapshots:
+            prev = self.snapshots[-1]
+            # Calculate midpoint change
+            midpoint_change = snapshot.midpoint - prev.midpoint
+            self.add_midpoint_change(midpoint_change)
+            # Calculate spread change
+            spread_change = snapshot.spread - prev.spread
+            self.add_spread_change(spread_change)
+            # Optionally, detect volume spikes (example: total volume difference)
+            prev_bid_vol = sum(b.size for b in prev.bids)
+            prev_ask_vol = sum(a.size for a in prev.asks)
+            curr_bid_vol = sum(b.size for b in snapshot.bids)
+            curr_ask_vol = sum(a.size for a in snapshot.asks)
+            volume_spike = abs((curr_bid_vol + curr_ask_vol) - (prev_bid_vol + prev_ask_vol))
+            self.add_volume_spike(volume_spike)
+        self.snapshots.append(snapshot)
+        if len(self.snapshots) > self.window:
+            self.snapshots.pop(0)
+        self.last_update = datetime.now(timezone.utc)
 
     def add_midpoint_change(self, change: Decimal):
         """Add midpoint change and maintain time window"""
@@ -333,12 +356,7 @@ class PolymarketLiquidityStrategy:
 
         metrics = self.volatility_tracker[asset_id]
 
-        # Track midpoint changes (simplified - would need previous midpoint)
-        # In real implementation, would compare with previous snapshot
-        metrics.add_midpoint_change(Decimal("0"))  # Placeholder
-
-        # Track spread changes
-        metrics.add_spread_change(orderbook.spread)
+        metrics.add_snapshot(orderbook)
 
     def _is_market_volatile(
         self,

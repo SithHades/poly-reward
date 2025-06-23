@@ -541,6 +541,7 @@ class OrderManager:
 
     async def _generate_hedge_orders(self, managed_order: ManagedOrder):
         """Generate hedge orders for filled LP positions"""
+        # TODO
         try:
             managed_order.hedge_pending = True
 
