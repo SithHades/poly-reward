@@ -1,4 +1,3 @@
-from decimal import Decimal
 from enum import Enum
 from typing import Annotated, Optional
 
@@ -6,8 +5,8 @@ from pydantic import BaseModel, Field, field_validator
 
 Token = str  # string identifier for a token, mostly representing a market side like "Yes", or "Up"
 
-Midpoint = Decimal  # the midpoint price of a market side.
-Spread = Decimal
+Midpoint = float  # the midpoint price of a market side.
+Spread = float
 
 
 class OrderStatus(str, Enum):
@@ -23,7 +22,7 @@ class BookSide(str, Enum):
 
 
 SidePriceMap = dict[
-    BookSide, Decimal
+    BookSide, float
 ]  # mapping from BookSide to price for a given token
 PricesResponse = dict[Token, SidePriceMap]  # mapping from token_id to SidePriceMap
 
@@ -31,11 +30,11 @@ PricesResponse = dict[Token, SidePriceMap]  # mapping from token_id to SidePrice
 class OrderArgsModel(BaseModel):
     token_id: Annotated[Token, Field(description="TokenID of the order")]
     price: Annotated[
-        Decimal,
-        Field(description="Price used to create the order", default_factory=Decimal),
+        float,
+        Field(description="Price used to create the order", default_factory=float),
     ]
     size: Annotated[
-        Decimal, Field(description="Size of the order", default_factory=Decimal)
+        float, Field(description="Size of the order", default_factory=float)
     ]
     side: Annotated[BookSide, Field(description="Side of the order (buy/sell)")]
 
@@ -59,7 +58,7 @@ class OrderDetails(BaseModel):
     matched_size: Annotated[
         int, Field(alias="size_matched", ge=0, description="Matched size in shares")
     ]
-    price: Annotated[Decimal, Field(description="Order price in decimal format")]
+    price: Annotated[float, Field(description="Order price in float format")]
     expiration: Annotated[
         int, Field(description="Expiration time in UNIX timestamp, 0 if no expiry")
     ] = 0
@@ -71,7 +70,7 @@ class OrderDetails(BaseModel):
 
     @field_validator("price", mode="before")
     def parse_price(cls, v):
-        return Decimal(v)
+        return float(v)
 
     @field_validator("original_size", mode="before")
     def parse_original_size(cls, v):

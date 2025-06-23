@@ -1,4 +1,3 @@
-from decimal import Decimal
 import logging
 import os
 from typing import Optional
@@ -94,16 +93,16 @@ class Client:
         """
         Get the midpoint for a given token.
         :param token: The token for which to get the midpoint.
-        :return: The midpoint price as a Decimal. If an error occurs, returns Decimal("0").
+        :return: The midpoint price as a float. If an error occurs, returns 0.
         """
         self.logger.info(f"Getting midpoint for token: {token}")
         midpoint_data = self.client.get_midpoint(token)
         try:
-            midpoint = Decimal(midpoint_data["mid"])
+            midpoint = midpoint_data["mid"]
             return midpoint
         except (KeyError, ValueError) as e:
             self.logger.error(f"Error getting midpoint for token {token}: {e}")
-            return Decimal(DEFAULT_MIDPOINT)
+            return DEFAULT_MIDPOINT
 
     def get_midpoints(self, tokens: list[Token]) -> dict[Token, Midpoint]:
         """
@@ -112,31 +111,33 @@ class Client:
         :return: Dictionary mapping tokens to their midpoints.
         """
         self.logger.info(f"Getting midpoints for tokens: {tokens}")
-        midpoints = self.client.get_midpoints([BookParams(token) for token in tokens])
-        for token, midpoint in midpoints.items():
+        midpoint_data = self.client.get_midpoints([BookParams(token) for token in tokens])
+        midpoints: dict[str, float] = {}
+         # Convert midpoint data to a dictionary with token as key and midpoint as value
+        for token, midpoint in midpoint_data.items():
             try:
-                midpoints[token] = Decimal(midpoint)
+                midpoints[token] = float(midpoint)
             except (KeyError, ValueError) as e:
                 self.logger.error(f"Error getting midpoint for token {token}: {e}")
-                midpoints[token] = Decimal(DEFAULT_MIDPOINT)
+                midpoints[token] = DEFAULT_MIDPOINT
         return midpoints
 
-    def get_price(self, token: Token, side: BookSide) -> Decimal:
+    def get_price(self, token: Token, side: BookSide) -> float:
         """
         Get the price for a given token and side.
         :param token: The token for which to get the price.
         :param side: The side of the order ('BUY' or 'SELL').
-        :return: The price as a Decimal. If an error occurs, returns Decimal("0").
+        :return: The price as a float. If an error occurs, returns 0.
         """
         self.logger.info(f"Getting price for token: {token}, side: {side}")
         try:
             price = self.client.get_price(token, side)
-            return Decimal(price["price"])
+            return float(price["price"])
         except Exception as e:
             self.logger.error(
                 f"Error getting price for token {token}, side {side}: {e}"
             )
-            return Decimal(DEFAULT_MIDPOINT)
+            return float(DEFAULT_MIDPOINT)
 
     def get_prices(self, params: list[BookParams]) -> PricesResponse:
         """
@@ -149,7 +150,7 @@ class Client:
             prices = self.client.get_prices(params)
             return {
                 token: {
-                    BookSide(str(side).lower()): Decimal(price)
+                    BookSide(str(side).lower()): float(price)
                     for side, price in side_prices.items()
                 }
                 for token, side_prices in prices.items()
@@ -162,15 +163,15 @@ class Client:
         """
         Get the spread for a given token.
         :param token: The token for which to get the spread.
-        :return: The spread as a Decimal. If an error occurs, returns Decimal("0").
+        :return: The spread as a float. If an error occurs, returns 0.
         """
         self.logger.info(f"Getting spread for token: {token}")
         try:
             spread = self.client.get_spread(token)
-            return Decimal(spread)
+            return float(spread)
         except Exception as e:
             self.logger.error(f"Error getting spread for token {token}: {e}")
-            return Decimal(DEFAULT_SPREAD)
+            return float(DEFAULT_SPREAD)
 
     def get_spreads(self, tokens: list[Token]) -> dict[Token, Spread]:
         """
@@ -180,28 +181,28 @@ class Client:
         """
         self.logger.info(f"Getting spreads for tokens: {tokens}")
         spreads_data = self.client.get_spreads([BookParams(token) for token in tokens])
-        spreads = {}
+        spreads: dict[Token, Spread] = {}
         for token, spread in spreads_data.items():
             try:
-                spreads[token] = Decimal(spread)
+                spreads[token] = float(spread)
             except (KeyError, ValueError) as e:
                 self.logger.error(f"Error getting spread for token {token}: {e}")
-                spreads[token] = Decimal(DEFAULT_SPREAD)
+                spreads[token] = float(DEFAULT_SPREAD)
         return spreads
 
-    def get_tick_size(self, token: Token) -> Decimal:
+    def get_tick_size(self, token: Token) -> float:
         """
         Get the tick size for a given token.
         :param token: The token for which to get the tick size.
-        :return: The tick size as a Decimal. If an error occurs, returns Decimal("0").
+        :return: The tick size as a float. If an error occurs, returns 0.
         """
         self.logger.info(f"Getting tick size for token: {token}")
         try:
             tick_size = self.client.get_tick_size(token)
-            return Decimal(tick_size)
+            return float(tick_size)
         except Exception as e:
             self.logger.error(f"Error getting tick size for token {token}: {e}")
-            return Decimal(DEFAULT_TICK_SIZE)
+            return float(DEFAULT_TICK_SIZE)
 
     def get_neg_risk(self, token: Token) -> bool:
         """
@@ -390,21 +391,21 @@ class Client:
         # TODO Implement if really needed
         return self.client.get_trades(params)
 
-    def get_last_trade_price(self, token: Token) -> Decimal:
+    def get_last_trade_price(self, token: Token) -> float:
         """
         Get the last trade price for a given token.
         :param token: The token for which to get the last trade price.
-        :return: The last trade price as a Decimal. If an error occurs, returns Decimal("0").
+        :return: The last trade price as a float. If an error occurs, returns 0.
         """
         self.logger.info(f"Getting last trade price for token: {token}")
         try:
             last_trade_price = self.client.get_last_trade_price(token)
-            return Decimal(last_trade_price.get("price", "0"))
+            return float(last_trade_price.get("price", "0"))
         except Exception as e:
             self.logger.error(f"Error getting last trade price for token {token}: {e}")
-            return Decimal("0")
+            return 0
 
-    def get_last_trade_prices(self, tokens: list[Token]) -> dict[Token, Decimal]:
+    def get_last_trades_prices(self, tokens: list[Token]) -> dict[Token, float]:
         """
         Get last trade prices for a list of tokens.
         :param tokens: List of tokens to get last trade prices for.
@@ -412,18 +413,18 @@ class Client:
         """
         self.logger.info(f"Getting last trade prices for tokens: {tokens}")
         try:
-            last_trade_prices = self.client.get_last_trade_prices(
+            last_trade_prices = self.client.get_last_trades_prices(
                 [BookParams(token) for token in tokens]
             )
             return {
-                token: Decimal(price.get("price", "0"))
+                token: float(price.get("price", "0"))
                 for token, price in last_trade_prices.items()
             }
         except Exception as e:
             self.logger.error(
                 f"Error getting last trade prices for tokens {tokens}: {e}"
             )
-            return {token: Decimal("0") for token in tokens}
+            return {token: 0 for token in tokens}
 
     def is_order_scoring(self, order_id: str):
         """

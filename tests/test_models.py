@@ -1,5 +1,4 @@
 import pytest
-from decimal import Decimal
 from datetime import datetime, timezone
 from src.models import Market, Order, Position, OrderSide, OrderStatus
 
@@ -9,27 +8,27 @@ class TestMarket:
         market = Market(
             id="market_1",
             name="Test Market",
-            current_price=Decimal("100.50"),
-            volume=Decimal("1000"),
-            bid=Decimal("100.00"),
-            ask=Decimal("101.00"),
+            current_price=100.50,
+            volume=1000,
+            bid=100.00,
+            ask=101.00,
         )
         assert market.id == "market_1"
         assert market.name == "Test Market"
-        assert market.current_price == Decimal("100.50")
-        assert market.volume == Decimal("1000")
-        assert market.bid == Decimal("100.00")
-        assert market.ask == Decimal("101.00")
+        assert market.current_price == 100.50
+        assert market.volume == 1000
+        assert market.bid == 100.00
+        assert market.ask == 101.00
 
     def test_market_validation_negative_price(self):
         with pytest.raises(ValueError, match="Current price cannot be negative"):
             Market(
                 id="market_1",
                 name="Test Market",
-                current_price=Decimal("-100.50"),
-                volume=Decimal("1000"),
-                bid=Decimal("100.00"),
-                ask=Decimal("101.00"),
+                current_price=-100.50,
+                volume=1000,
+                bid=100.00,
+                ask=101.00,
             )
 
     def test_market_validation_negative_volume(self):
@@ -37,10 +36,10 @@ class TestMarket:
             Market(
                 id="market_1",
                 name="Test Market",
-                current_price=Decimal("100.50"),
-                volume=Decimal("-1000"),
-                bid=Decimal("100.00"),
-                ask=Decimal("101.00"),
+                current_price=100.50,
+                volume=-1000,
+                bid=100.00,
+                ask=101.00,
             )
 
     def test_market_validation_negative_bid(self):
@@ -48,10 +47,10 @@ class TestMarket:
             Market(
                 id="market_1",
                 name="Test Market",
-                current_price=Decimal("100.50"),
-                volume=Decimal("1000"),
-                bid=Decimal("-100.00"),
-                ask=Decimal("101.00"),
+                current_price=100.50,
+                volume=1000,
+                bid=-100.00,
+                ask=101.00,
             )
 
     def test_market_validation_negative_ask(self):
@@ -59,10 +58,10 @@ class TestMarket:
             Market(
                 id="market_1",
                 name="Test Market",
-                current_price=Decimal("100.50"),
-                volume=Decimal("1000"),
-                bid=Decimal("100.00"),
-                ask=Decimal("-101.00"),
+                current_price=100.50,
+                volume=1000,
+                bid=100.00,
+                ask=-101.00,
             )
 
     def test_market_validation_bid_greater_than_ask(self):
@@ -70,31 +69,31 @@ class TestMarket:
             Market(
                 id="market_1",
                 name="Test Market",
-                current_price=Decimal("100.50"),
-                volume=Decimal("1000"),
-                bid=Decimal("102.00"),
-                ask=Decimal("101.00"),
+                current_price=100.50,
+                volume=1000,
+                bid=102.00,
+                ask=101.00,
             )
 
     def test_market_spread(self):
         market = Market(
             id="market_1",
             name="Test Market",
-            current_price=Decimal("100.50"),
-            volume=Decimal("1000"),
-            bid=Decimal("100.00"),
-            ask=Decimal("101.00"),
+            current_price=100.50,
+            volume=1000,
+            bid=100.00,
+            ask=101.00,
         )
-        assert market.spread() == Decimal("1.00")
+        assert market.spread() == 1.00
 
     def test_market_serialization(self):
         market = Market(
             id="market_1",
             name="Test Market",
-            current_price=Decimal("100.50"),
-            volume=Decimal("1000"),
-            bid=Decimal("100.00"),
-            ask=Decimal("101.00"),
+            current_price=100.50,
+            volume=1000,
+            bid=100.00,
+            ask=101.00,
             metadata={"exchange": "polymarket"},
         )
 
@@ -125,10 +124,10 @@ class TestMarket:
         market = Market(
             id="market_1",
             name="Test Market",
-            current_price=Decimal("100.50"),
-            volume=Decimal("1000"),
-            bid=Decimal("100.00"),
-            ask=Decimal("101.00"),
+            current_price=100.50,
+            volume=1000,
+            bid=100.00,
+            ask=101.00,
         )
 
         # Test JSON round-trip
@@ -150,19 +149,19 @@ class TestOrder:
             id="order_1",
             market_id="market_1",
             side=OrderSide.BUY,
-            price=Decimal("100.50"),
-            size=Decimal("10"),
+            price=100.50,
+            size=10,
             status=OrderStatus.OPEN,
             timestamp=timestamp,
         )
         assert order.id == "order_1"
         assert order.market_id == "market_1"
         assert order.side == OrderSide.BUY
-        assert order.price == Decimal("100.50")
-        assert order.size == Decimal("10")
+        assert order.price == 100.50
+        assert order.size == 10
         assert order.status == OrderStatus.OPEN
         assert order.timestamp == timestamp
-        assert order.filled_size == Decimal("0")
+        assert order.filled_size == 0
 
     def test_order_validation_zero_price(self):
         with pytest.raises(ValueError, match="Price must be positive"):
@@ -170,8 +169,8 @@ class TestOrder:
                 id="order_1",
                 market_id="market_1",
                 side=OrderSide.BUY,
-                price=Decimal("0"),
-                size=Decimal("10"),
+                price=0,
+                size=10,
                 status=OrderStatus.OPEN,
             )
 
@@ -181,8 +180,8 @@ class TestOrder:
                 id="order_1",
                 market_id="market_1",
                 side=OrderSide.BUY,
-                price=Decimal("-100.50"),
-                size=Decimal("10"),
+                price=-100.50,
+                size=10,
                 status=OrderStatus.OPEN,
             )
 
@@ -192,8 +191,8 @@ class TestOrder:
                 id="order_1",
                 market_id="market_1",
                 side=OrderSide.BUY,
-                price=Decimal("100.50"),
-                size=Decimal("0"),
+                price=100.50,
+                size=0,
                 status=OrderStatus.OPEN,
             )
 
@@ -203,10 +202,10 @@ class TestOrder:
                 id="order_1",
                 market_id="market_1",
                 side=OrderSide.BUY,
-                price=Decimal("100.50"),
-                size=Decimal("10"),
+                price=100.50,
+                size=10,
                 status=OrderStatus.OPEN,
-                filled_size=Decimal("-5"),
+                filled_size=-5,
             )
 
     def test_order_validation_filled_size_exceeds_size(self):
@@ -215,10 +214,10 @@ class TestOrder:
                 id="order_1",
                 market_id="market_1",
                 side=OrderSide.BUY,
-                price=Decimal("100.50"),
-                size=Decimal("10"),
+                price=100.50,
+                size=10,
                 status=OrderStatus.OPEN,
-                filled_size=Decimal("15"),
+                filled_size=15,
             )
 
     def test_order_remaining_size(self):
@@ -226,12 +225,12 @@ class TestOrder:
             id="order_1",
             market_id="market_1",
             side=OrderSide.BUY,
-            price=Decimal("100.50"),
-            size=Decimal("10"),
+            price=100.50,
+            size=10,
             status=OrderStatus.PARTIALLY_FILLED,
-            filled_size=Decimal("3"),
+            filled_size=3,
         )
-        assert order.remaining_size() == Decimal("7")
+        assert order.remaining_size() == 7
 
     def test_order_is_filled(self):
         # Not filled
@@ -239,15 +238,15 @@ class TestOrder:
             id="order_1",
             market_id="market_1",
             side=OrderSide.BUY,
-            price=Decimal("100.50"),
-            size=Decimal("10"),
+            price=100.50,
+            size=10,
             status=OrderStatus.OPEN,
-            filled_size=Decimal("0"),
+            filled_size=0,
         )
         assert not order.is_filled()
 
         # Fully filled
-        order.filled_size = Decimal("10")
+        order.filled_size = 10
         assert order.is_filled()
 
     def test_order_fill_percentage(self):
@@ -255,17 +254,17 @@ class TestOrder:
             id="order_1",
             market_id="market_1",
             side=OrderSide.BUY,
-            price=Decimal("100.50"),
-            size=Decimal("10"),
+            price=100.50,
+            size=10,
             status=OrderStatus.PARTIALLY_FILLED,
-            filled_size=Decimal("3"),
+            filled_size=3,
         )
-        assert order.fill_percentage() == Decimal("30")
+        assert order.fill_percentage() == 30
 
         # Edge case: zero size
-        order.size = Decimal("0")
-        order.filled_size = Decimal("0")
-        assert order.fill_percentage() == Decimal("0")
+        order.size = 0
+        order.filled_size = 0
+        assert order.fill_percentage() == 0
 
     def test_order_serialization(self):
         timestamp = datetime.now(timezone.utc)
@@ -273,11 +272,11 @@ class TestOrder:
             id="order_1",
             market_id="market_1",
             side=OrderSide.SELL,
-            price=Decimal("100.50"),
-            size=Decimal("10"),
+            price=100.50,
+            size=10,
             status=OrderStatus.FILLED,
             timestamp=timestamp,
-            filled_size=Decimal("10"),
+            filled_size=10,
             metadata={"broker": "test"},
         )
 
@@ -313,8 +312,8 @@ class TestOrder:
             id="order_1",
             market_id="market_1",
             side=OrderSide.BUY,
-            price=Decimal("100.50"),
-            size=Decimal("10"),
+            price=100.50,
+            size=10,
             status=OrderStatus.OPEN,
         )
 
@@ -334,89 +333,89 @@ class TestOrder:
 class TestPosition:
     def test_position_creation(self):
         position = Position(
-            market_id="market_1", size=Decimal("10"), entry_price=Decimal("100.50")
+            market_id="market_1", size=10, entry_price=100.50
         )
         assert position.market_id == "market_1"
-        assert position.size == Decimal("10")
-        assert position.entry_price == Decimal("100.50")
+        assert position.size == 10
+        assert position.entry_price == 100.50
 
     def test_position_validation_zero_entry_price(self):
         with pytest.raises(ValueError, match="Entry price must be positive"):
-            Position(market_id="market_1", size=Decimal("10"), entry_price=Decimal("0"))
+            Position(market_id="market_1", size=10, entry_price=0)
 
     def test_position_validation_negative_entry_price(self):
         with pytest.raises(ValueError, match="Entry price must be positive"):
             Position(
-                market_id="market_1", size=Decimal("10"), entry_price=Decimal("-100.50")
+                market_id="market_1", size=10, entry_price=-100.50
             )
 
     def test_position_current_value(self):
         position = Position(
-            market_id="market_1", size=Decimal("10"), entry_price=Decimal("100.50")
+            market_id="market_1", size=10, entry_price=100.50
         )
-        current_price = Decimal("105.00")
-        assert position.current_value(current_price) == Decimal("1050.00")
+        current_price = 105.00
+        assert position.current_value(current_price) == 1050.00
 
         # Test with negative position (short)
-        position.size = Decimal("-10")
-        assert position.current_value(current_price) == Decimal("1050.00")
+        position.size = -10
+        assert position.current_value(current_price) == 1050.00
 
     def test_position_pnl_long(self):
         # Long position
         position = Position(
-            market_id="market_1", size=Decimal("10"), entry_price=Decimal("100.00")
+            market_id="market_1", size=10, entry_price=100.00
         )
 
         # Price goes up - profit
-        current_price = Decimal("105.00")
-        assert position.pnl(current_price) == Decimal("50.00")
+        current_price = 105.00
+        assert position.pnl(current_price) == 50.00
 
         # Price goes down - loss
-        current_price = Decimal("95.00")
-        assert position.pnl(current_price) == Decimal("-50.00")
+        current_price = 95.00
+        assert position.pnl(current_price) == -50.00
 
     def test_position_pnl_short(self):
         # Short position
         position = Position(
-            market_id="market_1", size=Decimal("-10"), entry_price=Decimal("100.00")
+            market_id="market_1", size=-10, entry_price=100.00
         )
 
         # Price goes down - profit
-        current_price = Decimal("95.00")
-        assert position.pnl(current_price) == Decimal("50.00")
+        current_price = 95.00
+        assert position.pnl(current_price) == 50.00
 
         # Price goes up - loss
-        current_price = Decimal("105.00")
-        assert position.pnl(current_price) == Decimal("-50.00")
+        current_price = 105.00
+        assert position.pnl(current_price) == -50.00
 
     def test_position_pnl_zero_size(self):
         position = Position(
-            market_id="market_1", size=Decimal("0"), entry_price=Decimal("100.00")
+            market_id="market_1", size=0, entry_price=100.00
         )
-        current_price = Decimal("105.00")
-        assert position.pnl(current_price) == Decimal("0")
+        current_price = 105.00
+        assert position.pnl(current_price) == 0
 
     def test_position_pnl_percentage(self):
         position = Position(
-            market_id="market_1", size=Decimal("10"), entry_price=Decimal("100.00")
+            market_id="market_1", size=10, entry_price=100.00
         )
 
         # 5% gain
-        current_price = Decimal("105.00")
-        assert position.pnl_percentage(current_price) == Decimal("5.00")
+        current_price = 105.00
+        assert position.pnl_percentage(current_price) == 5.00
 
         # 10% loss
-        current_price = Decimal("90.00")
-        assert position.pnl_percentage(current_price) == Decimal("-10.00")
+        current_price = 90.00
+        assert position.pnl_percentage(current_price) == -10.00
 
         # Edge case: zero entry price
-        position.entry_price = Decimal("0")
-        assert position.pnl_percentage(current_price) == Decimal("0")
+        position.entry_price = 0
+        assert position.pnl_percentage(current_price) == 0
 
     def test_position_types(self):
         # Long position
         long_position = Position(
-            market_id="market_1", size=Decimal("10"), entry_price=Decimal("100.00")
+            market_id="market_1", size=10, entry_price=100.00
         )
         assert long_position.is_long()
         assert not long_position.is_short()
@@ -424,7 +423,7 @@ class TestPosition:
 
         # Short position
         short_position = Position(
-            market_id="market_1", size=Decimal("-10"), entry_price=Decimal("100.00")
+            market_id="market_1", size=-10, entry_price=100.00
         )
         assert not short_position.is_long()
         assert short_position.is_short()
@@ -432,7 +431,7 @@ class TestPosition:
 
         # Flat position
         flat_position = Position(
-            market_id="market_1", size=Decimal("0"), entry_price=Decimal("100.00")
+            market_id="market_1", size=0, entry_price=100.00
         )
         assert not flat_position.is_long()
         assert not flat_position.is_short()
@@ -441,8 +440,8 @@ class TestPosition:
     def test_position_serialization(self):
         position = Position(
             market_id="market_1",
-            size=Decimal("-5.5"),
-            entry_price=Decimal("100.50"),
+            size=-5.5,
+            entry_price=100.50,
             metadata={"strategy": "momentum"},
         )
 
@@ -450,8 +449,8 @@ class TestPosition:
         position_dict = position.to_dict()
         expected_dict = {
             "market_id": "market_1",
-            "size": "-5.5",
-            "entry_price": "100.50",
+            "size": -5.5,
+            "entry_price": -100.50,
             "metadata": {"strategy": "momentum"},
         }
         assert position_dict == expected_dict
@@ -465,7 +464,7 @@ class TestPosition:
 
     def test_position_json_serialization(self):
         position = Position(
-            market_id="market_1", size=Decimal("10"), entry_price=Decimal("100.50")
+            market_id="market_1", size=10, entry_price=100.50
         )
 
         # Test JSON round-trip

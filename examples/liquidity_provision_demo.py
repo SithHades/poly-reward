@@ -15,7 +15,6 @@ import sys
 import os
 import logging
 import json
-from decimal import Decimal
 from typing import List
 from datetime import datetime, timezone
 
@@ -47,10 +46,10 @@ def demo_market_screening():
 
     # Set up screening criteria
     criteria = ScreeningCriteria(
-        min_daily_rewards=Decimal("30"),  # Minimum $30/day rewards
-        max_min_order_size=Decimal("200"),  # Max $200 minimum order
-        max_competition_density=Decimal("0.7"),  # Max 70% competition
-        min_spread_budget=Decimal("0.02"),  # Min 2c spread
+        min_daily_rewards=30,  # Minimum $30/day rewards
+        max_min_order_size=200,  # Max $200 minimum order
+        max_competition_density=0.7,  # Max 70% competition
+        min_spread_budget=0.02,  # Min 2c spread
         max_risk_level="medium",  # Medium risk or lower
     )
 
@@ -101,11 +100,11 @@ def demo_strategy_analysis(opportunities: List[MarketOpportunity]):
 
     # Configure strategy
     config = LiquidityProvisionConfig(
-        max_spread_from_midpoint=Decimal("0.03"),  # 3c max from midpoint
-        optimal_distance_from_midpoint=Decimal("0.015"),  # 1.5c optimal distance
-        min_order_size=Decimal("50"),  # $50 minimum orders
-        max_position_size=Decimal("500"),  # $500 max per market
-        volatility_exit_threshold=Decimal("0.02"),  # 2% volatility exit
+        max_spread_from_midpoint=0.03,  # 3c max from midpoint
+        optimal_distance_from_midpoint=0.015,  # 1.5c optimal distance
+        min_order_size=50,  # $50 minimum orders
+        max_position_size=500,  # $500 max per market
+        volatility_exit_threshold=0.02,  # 2% volatility exit
         enable_yes_no_hedging=True,  # Enable hedging
         order_refresh_interval_minutes=30,  # Refresh every 30 min
     )
@@ -155,7 +154,7 @@ def demo_strategy_analysis(opportunities: List[MarketOpportunity]):
     if condition.name == "ATTRACTIVE":
         # Calculate optimal orders
         current_positions = {}  # No existing positions
-        available_capital = Decimal("2000")  # $2000 available
+        available_capital = 2000  # $2000 available
 
         orders = strategy.calculate_optimal_orders(
             yes_orderbook, no_orderbook, current_positions, available_capital
@@ -195,8 +194,8 @@ def demo_risk_management():
             id="order_1",
             market_id="test_market",
             side=OrderSide.BUY,
-            price=Decimal("0.52"),
-            size=Decimal("100"),
+            price=0.52,
+            size=100,
             status=OrderStatus.OPEN,
             timestamp=current_time - timedelta(minutes=35),  # Old order
         ),
@@ -204,8 +203,8 @@ def demo_risk_management():
             id="order_2",
             market_id="test_market",
             side=OrderSide.SELL,
-            price=Decimal("0.54"),
-            size=Decimal("100"),
+            price=0.54,
+            size=100,
             status=OrderStatus.OPEN,
             timestamp=current_time - timedelta(minutes=10),  # Recent order
         ),
@@ -213,11 +212,11 @@ def demo_risk_management():
             id="order_3",
             market_id="test_market",
             side=OrderSide.BUY,
-            price=Decimal("0.55"),
-            size=Decimal("100"),
+            price=0.55,
+            size=100,
             status=OrderStatus.FILLED,
             timestamp=current_time - timedelta(minutes=5),
-            filled_size=Decimal("100"),
+            filled_size=100,
             metadata={"market_type": "YES"},
         ),
     ]
@@ -247,18 +246,18 @@ def demo_risk_management():
 
     yes_orderbook = OrderbookSnapshot(
         asset_id="yes_token",
-        bids=[OrderbookLevel(Decimal("0.52"), Decimal("100"))],
-        asks=[OrderbookLevel(Decimal("0.54"), Decimal("100"))],
-        midpoint=Decimal("0.53"),
-        spread=Decimal("0.02"),
+        bids=[OrderbookLevel(0.52, 100)],
+        asks=[OrderbookLevel(0.54, 100)],
+        midpoint=0.53,
+        spread=0.02,
     )
 
     no_orderbook = OrderbookSnapshot(
         asset_id="no_token",
-        bids=[OrderbookLevel(Decimal("0.46"), Decimal("100"))],
-        asks=[OrderbookLevel(Decimal("0.48"), Decimal("100"))],
-        midpoint=Decimal("0.47"),
-        spread=Decimal("0.02"),
+        bids=[OrderbookLevel(0.46, 100)],
+        asks=[OrderbookLevel(0.48, 100)],
+        midpoint=0.47,
+        spread=0.02,
     )
 
     hedge_orders = strategy.calculate_hedge_orders(
@@ -280,28 +279,28 @@ def demo_portfolio_analysis():
     # Mock portfolio positions
     positions = {
         "market_1": Position(
-            market_id="market_1", size=Decimal("150"), entry_price=Decimal("0.55")
+            market_id="market_1", size=150, entry_price=0.55
         ),
         "market_2": Position(
             market_id="market_2",
-            size=Decimal("-200"),  # Short position
-            entry_price=Decimal("0.45"),
+            size=-200,  # Short position
+            entry_price=0.45,
         ),
         "market_3": Position(
-            market_id="market_3", size=Decimal("100"), entry_price=Decimal("0.60")
+            market_id="market_3", size=100, entry_price=0.60
         ),
     }
 
     # Mock current prices
     current_prices = {
-        "market_1": Decimal("0.58"),  # +5.5% gain
-        "market_2": Decimal("0.42"),  # +6.7% gain (short position)
-        "market_3": Decimal("0.57"),  # -5% loss
+        "market_1": 0.58,  # +5.5% gain
+        "market_2": 0.42,  # +6.7% gain (short position)
+        "market_3": 0.57,  # -5% loss
     }
 
     print("Portfolio Positions:")
-    total_pnl = Decimal("0")
-    total_value = Decimal("0")
+    total_pnl = 0
+    total_value = 0
 
     for market_id, position in positions.items():
         current_price = current_prices[market_id]

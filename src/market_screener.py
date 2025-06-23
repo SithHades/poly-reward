@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple
-from decimal import Decimal
 import logging
 
 from src.models import Market, Token
@@ -15,12 +14,12 @@ class MarketOpportunity:
     market: Market
     yes_token: Token
     no_token: Token
-    reward_score: Decimal
-    competition_density: Decimal
-    estimated_daily_rewards: Decimal
-    min_capital_required: Decimal
-    max_spread_allowed: Decimal
-    recommended_position_size: Decimal
+    reward_score: float
+    competition_density: float
+    estimated_daily_rewards: float
+    min_capital_required: float
+    max_spread_allowed: float
+    recommended_position_size: float
     risk_level: str  # "low", "medium", "high"
 
     def to_dict(self) -> Dict[str, any]:
@@ -43,11 +42,11 @@ class MarketOpportunity:
 class ScreeningCriteria:
     """Criteria for screening profitable markets"""
 
-    min_daily_rewards: Decimal = Decimal("50")  # Minimum $50 daily rewards
-    min_reward_rate: Decimal = Decimal("10")  # Minimum 10% APR
-    max_min_order_size: Decimal = Decimal("500")  # Max $500 minimum order
-    max_competition_density: Decimal = Decimal("0.6")  # Max 60% competition
-    min_spread_budget: Decimal = Decimal("0.02")  # Min 2c spread allowed
+    min_daily_rewards: float = 50  # Minimum $50 daily rewards
+    min_reward_rate: float = 10  # Minimum 10% APR
+    max_min_order_size: float = 500  # Max $500 minimum order
+    max_competition_density: float = 0.6  # Max 60% competition
+    min_spread_budget: float = 0.02  # Min 2c spread allowed
     max_risk_level: str = "medium"  # Maximum acceptable risk level
     require_active_orders: bool = True  # Only markets accepting orders
     exclude_archived: bool = True  # Exclude archived markets
@@ -262,8 +261,8 @@ class PolymarketScreener:
 
             # Estimate capital requirements
             min_capital_required = max(
-                Decimal(str(min_size_for_rewards * 2)),  # YES + NO positions
-                Decimal(str(market.minimum_order_size * 2)),
+                min_size_for_rewards * 2,  # YES + NO positions
+                market.minimum_order_size * 2,
             )
 
             # Risk assessment
@@ -278,9 +277,9 @@ class PolymarketScreener:
                 no_token=no_token,
                 reward_score=reward_score,
                 competition_density=competition_density,
-                estimated_daily_rewards=Decimal(str(total_daily_rewards)),
+                estimated_daily_rewards=total_daily_rewards,
                 min_capital_required=min_capital_required,
-                max_spread_allowed=Decimal(str(max_scoring_spread)),
+                max_spread_allowed=max_scoring_spread,
                 recommended_position_size=min_capital_required,
                 risk_level=risk_level,
             )
@@ -296,14 +295,14 @@ class PolymarketScreener:
         yes_orderbook: Optional[OrderbookSnapshot],
         no_orderbook: Optional[OrderbookSnapshot],
         max_scoring_spread: float,
-    ) -> Decimal:
+    ) -> float:
         """Estimate competition density in the reward-earning spread"""
         if not yes_orderbook or not no_orderbook:
-            return Decimal("0.5")  # Default moderate competition
+            return 0.5  # Default moderate competition
 
         try:
             # Calculate volume in the reward spread around midpoint
-            spread_range = Decimal(str(max_scoring_spread))
+            spread_range = max_scoring_spread
             yes_mid = yes_orderbook.midpoint
 
             # Volume in reward range
@@ -322,37 +321,37 @@ class PolymarketScreener:
             total_volume = yes_volume + no_volume
 
             # Estimate capacity (simplified heuristic)
-            estimated_capacity = Decimal("1000")  # $1000 typical capacity
+            estimated_capacity = 1000  # $1000 typical capacity
 
-            return min(total_volume / estimated_capacity, Decimal("1.0"))
+            return min(total_volume / estimated_capacity, 1.0)
 
         except Exception as e:
             self.logger.error(f"Error estimating competition density: {e}")
-            return Decimal("0.5")
+            return 0.5
 
     def _calculate_reward_score(
         self,
         total_daily_rewards: float,
         min_size: float,
-        competition_density: Decimal,
+        competition_density: float,
         max_spread: float,
-    ) -> Decimal:
+    ) -> float:
         """Calculate overall reward score for ranking opportunities"""
         try:
             # Base score from daily rewards
-            reward_component = Decimal(str(total_daily_rewards))
+            reward_component = total_daily_rewards
 
             # Penalty for high capital requirements
             capital_efficiency = max(
-                Decimal("0.1"),
-                Decimal("1000") / max(Decimal(str(min_size)), Decimal("1")),
+                0.1,
+                1000 / max(min_size, 1),
             )
 
             # Penalty for high competition
-            competition_factor = Decimal("1.0") - competition_density
+            competition_factor = 1.0 - competition_density
 
             # Bonus for larger spreads (more room to avoid fills)
-            spread_bonus = Decimal(str(max_spread)) * Decimal("10")
+            spread_bonus = max_spread * 10
 
             # Combined score
             score = (
@@ -360,23 +359,23 @@ class PolymarketScreener:
                 + spread_bonus
             )
 
-            return max(score, Decimal("0"))
+            return max(score, 0)
 
         except Exception as e:
             self.logger.error(f"Error calculating reward score: {e}")
-            return Decimal("0")
+            return 0
 
     def _assess_risk_level(
-        self, market, competition_density: Decimal, max_spread: float
+        self, market, competition_density: float, max_spread: float
     ) -> str:
         """Assess risk level of the market opportunity"""
         try:
             risk_factors = 0
 
             # High competition increases risk
-            if competition_density > Decimal("0.7"):
+            if competition_density > 0.7:
                 risk_factors += 2
-            elif competition_density > Decimal("0.4"):
+            elif competition_density > 0.4:
                 risk_factors += 1
 
             # Small spread increases fill risk
@@ -436,15 +435,15 @@ class PolymarketScreener:
             # Parse bids from OrderBookSummary format
             bids = []
             for bid_data in orderbook_data.bids:
-                price = Decimal(str(bid_data.get("price", 0)))
-                size = Decimal(str(bid_data.get("size", 0)))
+                price = float(bid_data.get("price", 0))
+                size = float(bid_data.get("size", 0))
                 bids.append(OrderbookLevel(price, size))
 
             # Parse asks from OrderBookSummary format
             asks = []
             for ask_data in orderbook_data.asks:
-                price = Decimal(str(ask_data.get("price", 0)))
-                size = Decimal(str(ask_data.get("size", 0)))
+                price = float(ask_data.get("price", 0))
+                size = float(ask_data.get("size", 0))
                 asks.append(OrderbookLevel(price, size))
 
             # Calculate midpoint and spread
@@ -454,8 +453,8 @@ class PolymarketScreener:
                 midpoint = (best_bid + best_ask) / 2
                 spread = best_ask - best_bid
             else:
-                midpoint = Decimal(str(current_price))
-                spread = Decimal("0.02")  # Default 2c spread
+                midpoint = float(current_price)
+                spread = 0.02  # Default 2c spread
 
             return OrderbookSnapshot(
                 asset_id=asset_id,
@@ -472,6 +471,6 @@ class PolymarketScreener:
                 asset_id=asset_id,
                 bids=[],
                 asks=[],
-                midpoint=Decimal(str(current_price)),
-                spread=Decimal("0.02"),
+                midpoint=current_price,
+                spread=0.02,
             )

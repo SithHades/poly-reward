@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Any
-from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 import logging
@@ -20,8 +19,8 @@ class MarketCondition(Enum):
 class OrderbookLevel:
     """Represents a single level in the orderbook"""
 
-    price: Decimal
-    size: Decimal
+    price: float
+    size: float
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -32,19 +31,19 @@ class OrderbookSnapshot:
     asset_id: str
     bids: List[OrderbookLevel]
     asks: List[OrderbookLevel]
-    midpoint: Decimal
-    spread: Decimal
+    midpoint: float
+    spread: float
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
-    def best_bid(self) -> Optional[Decimal]:
+    def best_bid(self) -> Optional[float]:
         return self.bids[0].price if self.bids else None
 
-    def best_ask(self) -> Optional[Decimal]:
+    def best_ask(self) -> Optional[float]:
         return self.asks[0].price if self.asks else None
 
     def total_bid_volume_in_range(
-        self, price_range: Tuple[Decimal, Decimal]
-    ) -> Decimal:
+        self, price_range: Tuple[float, float]
+    ) -> float:
         """Calculate total bid volume within price range"""
         min_price, max_price = price_range
         return sum(
@@ -52,8 +51,8 @@ class OrderbookSnapshot:
         )
 
     def total_ask_volume_in_range(
-        self, price_range: Tuple[Decimal, Decimal]
-    ) -> Decimal:
+        self, price_range: tuple[float, float]
+    ) -> float:
         """Calculate total ask volume within price range"""
         min_price, max_price = price_range
         return sum(
@@ -65,12 +64,12 @@ class OrderbookSnapshot:
 class VolatilityMetrics:
     """Tracks market volatility indicators"""
 
-    midpoint_changes: List[Decimal] = field(default_factory=list)
-    spread_changes: List[Decimal] = field(default_factory=list)
-    volume_spikes: List[Decimal] = field(default_factory=list)
+    midpoint_changes: list[float] = field(default_factory=list)
+    spread_changes: list[float] = field(default_factory=list)
+    volume_spikes: list[float] = field(default_factory=list)
     last_update: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     window: int = 50
-    snapshots: List["OrderbookSnapshot"] = field(default_factory=list)  # Store recent snapshots
+    snapshots: list["OrderbookSnapshot"] = field(default_factory=list)  # Store recent snapshots
 
     def add_snapshot(self, snapshot: OrderbookSnapshot):
         """Add a new orderbook snapshot and update volatility metrics"""
@@ -94,19 +93,19 @@ class VolatilityMetrics:
             self.snapshots.pop(0)
         self.last_update = datetime.now(timezone.utc)
 
-    def add_midpoint_change(self, change: Decimal):
+    def add_midpoint_change(self, change: float):
         """Add midpoint change and maintain time window"""
         self._add_to_window(self.midpoint_changes, change)
 
-    def add_spread_change(self, change: Decimal):
+    def add_spread_change(self, change: float):
         """Add spread change and maintain time window"""
         self._add_to_window(self.spread_changes, change)
 
-    def add_volume_spike(self, volume: Decimal):
+    def add_volume_spike(self, volume: float):
         """Add volume spike and maintain time window"""
         self._add_to_window(self.volume_spikes, volume)
 
-    def _add_to_window(self, data_list: List[Decimal], value: Decimal):
+    def _add_to_window(self, data_list: list[float], value: float):
         """Add value and maintain time window (simplified - in reality would track timestamps)"""
         data_list.append(value)
         if len(data_list) > 50:  # Keep last 50 data points as proxy for time window
@@ -115,8 +114,8 @@ class VolatilityMetrics:
 
     def is_volatile(
         self,
-        midpoint_threshold: Decimal = Decimal("0.02"),
-        spread_threshold: Decimal = Decimal("0.05"),
+        midpoint_threshold: float = 0.02,
+        spread_threshold: float = 0.05,
     ) -> bool:
         """Determine if market is currently volatile"""
         if not self.midpoint_changes and not self.spread_changes:
@@ -133,7 +132,7 @@ class VolatilityMetrics:
                 abs(change) for change in recent_midpoint_data
             )
         else:
-            recent_midpoint_volatility = Decimal("0")
+            recent_midpoint_volatility = 0
 
         # Check for recent spread expansion
         if self.spread_changes:
@@ -144,7 +143,7 @@ class VolatilityMetrics:
             )
             recent_spread_volatility = max(abs(change) for change in recent_spread_data)
         else:
-            recent_spread_volatility = Decimal("0")
+            recent_spread_volatility = 0
 
         return (
             recent_midpoint_volatility > midpoint_threshold
@@ -157,20 +156,18 @@ class LiquidityProvisionConfig:
     """Configuration for liquidity provision strategy"""
 
     # Core LP parameters
-    max_spread_from_midpoint: Decimal = Decimal("0.03")  # 3c max distance from midpoint
-    min_order_size: Decimal = Decimal("100")  # Minimum shares for rewards
-    optimal_distance_from_midpoint: Decimal = Decimal("0.015")  # 1.5c for safety
+    max_spread_from_midpoint: float = 0.03  # 3c max distance from midpoint
+    min_order_size: float = 100  # Minimum shares for rewards
+    optimal_distance_from_midpoint: float = 0.015  # 1.5c for safety
 
     # Risk management
-    max_position_size: Decimal = Decimal("1000")  # Max shares per market
-    max_total_exposure: Decimal = Decimal("5000")  # Max total exposure across markets
-    volatility_exit_threshold: Decimal = Decimal(
-        "0.02"
-    )  # 2% midpoint move triggers exit
+    max_position_size: float = 1000  # Max shares per market
+    max_total_exposure: float = 5000  # Max total exposure across markets
+    volatility_exit_threshold: float = 0.02  # 2% midpoint move triggers exit
 
     # Competition assessment
-    min_reward_share_threshold: Decimal = Decimal("0.1")  # 10% minimum reward share
-    max_competition_density: Decimal = Decimal("0.8")  # 80% of spread already filled
+    min_reward_share_threshold: float = 0.1  # 10% minimum reward share
+    max_competition_density: float = 0.8  # 80% of spread already filled
 
     # FIFO management
     order_refresh_interval_minutes: int = 30  # Refresh orders every 30 minutes
@@ -178,7 +175,7 @@ class LiquidityProvisionConfig:
 
     # Hedging
     enable_yes_no_hedging: bool = True
-    hedge_ratio: Decimal = Decimal("1.0")  # 1:1 hedging ratio
+    hedge_ratio: float = 1.0  # 1:1 hedging ratio
 
 
 class PolymarketLiquidityStrategy:
@@ -253,8 +250,8 @@ class PolymarketLiquidityStrategy:
         self,
         yes_orderbook: OrderbookSnapshot,
         no_orderbook: OrderbookSnapshot,
-        current_positions: Dict[str, Dict[str, Any]],
-        available_capital: Decimal,
+        current_positions: dict[str, dict[str, Any]],
+        available_capital: float,
     ) -> List[Dict[str, Any]]:
         """
         Calculate optimal liquidity provision orders
@@ -374,12 +371,12 @@ class PolymarketLiquidityStrategy:
 
     def _calculate_competition_density(
         self, yes_orderbook: OrderbookSnapshot, no_orderbook: OrderbookSnapshot
-    ) -> Decimal:
+    ) -> float:
         """
         Calculate how much of the profitable spread is already occupied by other LPs
 
         Returns:
-            Decimal between 0 and 1 representing density of competition
+            float between 0 and 1 representing density of competition
         """
         # Define the 3c range around midpoint where LP rewards are earned
         yes_mid = yes_orderbook.midpoint
@@ -404,16 +401,16 @@ class PolymarketLiquidityStrategy:
             self.config.min_order_size * 10
         )  # Assume 10x min order size as capacity
 
-        return min(total_volume_in_range / estimated_capacity, Decimal("1.0"))
+        return min(total_volume_in_range / estimated_capacity, 1.0)
 
     def _estimate_reward_share(
         self, yes_orderbook: OrderbookSnapshot, no_orderbook: OrderbookSnapshot
-    ) -> Decimal:
+    ) -> float:
         """
         Estimate potential reward share based on our planned order size vs existing competition
 
         Returns:
-            Decimal between 0 and 1 representing estimated reward share
+            float between 0 and 1 representing estimated reward share
         """
         # Calculate existing competition
         competition_density = self._calculate_competition_density(
@@ -421,19 +418,17 @@ class PolymarketLiquidityStrategy:
         )
 
         # Simple heuristic: our share inversely related to competition density
-        estimated_share = (Decimal("1.0") - competition_density) * Decimal(
-            "0.5"
-        )  # Max 50% in best case
+        estimated_share = (1.0 - competition_density) * 0.5  # Max 50% in best case
 
-        return max(estimated_share, Decimal("0.01"))  # Minimum 1%
+        return max(estimated_share, 0.01)  # Minimum 1%
 
     def _generate_market_orders(
         self,
         orderbook: OrderbookSnapshot,
         is_yes_market: bool,
-        max_size: Decimal,
-        current_position: Optional[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        max_size: float,
+        current_position: Optional[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         """Generate orders for a specific market (YES or NO)"""
         orders = []
 
@@ -443,7 +438,7 @@ class PolymarketLiquidityStrategy:
 
         # Generate bid order (buying at below midpoint)
         bid_price = midpoint - target_distance
-        if bid_price > Decimal("0.01"):  # Minimum price check
+        if bid_price > 0.01:  # Minimum price check
             orders.append(
                 {
                     "side": BookSide.BUY,
@@ -456,7 +451,7 @@ class PolymarketLiquidityStrategy:
 
         # Generate ask order (selling at above midpoint)
         ask_price = midpoint + target_distance
-        if ask_price < Decimal("0.99"):  # Maximum price check
+        if ask_price < 0.99:  # Maximum price check
             orders.append(
                 {
                     "side": BookSide.SELL,
@@ -474,7 +469,7 @@ class PolymarketLiquidityStrategy:
         filled_order: OrderDetails,
         yes_orderbook: OrderbookSnapshot,
         no_orderbook: OrderbookSnapshot,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Calculate hedging orders when a liquidity provision order gets filled
 
@@ -492,12 +487,12 @@ class PolymarketLiquidityStrategy:
             # Calculate hedge price using YES/NO relationship: p_yes + p_no = 1
             if "YES" in filled_order.metadata.get("market_type", ""):
                 # Original order was YES, hedge with NO
-                hedge_price = Decimal("1.0") - filled_price
+                hedge_price = 1.0 - filled_price
                 hedge_market_type = "NO"
                 target_orderbook = no_orderbook
             else:
                 # Original order was NO, hedge with YES
-                hedge_price = Decimal("1.0") - filled_price
+                hedge_price = 1.0 - filled_price
                 hedge_market_type = "YES"
                 target_orderbook = yes_orderbook
 

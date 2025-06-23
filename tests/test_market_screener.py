@@ -1,4 +1,3 @@
-from decimal import Decimal
 from unittest.mock import Mock, patch
 from src.market_screener import PolymarketScreener, ScreeningCriteria, MarketOpportunity
 from src.client import Client
@@ -9,24 +8,24 @@ class TestScreeningCriteria:
     def test_default_criteria(self):
         criteria = ScreeningCriteria()
 
-        assert criteria.min_daily_rewards == Decimal("50")
-        assert criteria.min_reward_rate == Decimal("10")
-        assert criteria.max_min_order_size == Decimal("500")
-        assert criteria.max_competition_density == Decimal("0.6")
-        assert criteria.min_spread_budget == Decimal("0.02")
+        assert criteria.min_daily_rewards == 50
+        assert criteria.min_reward_rate == 10
+        assert criteria.max_min_order_size == 500
+        assert criteria.max_competition_density == 0.6
+        assert criteria.min_spread_budget == 0.02
         assert criteria.max_risk_level == "medium"
         assert criteria.require_active_orders is True
         assert criteria.exclude_archived is True
 
     def test_custom_criteria(self):
         criteria = ScreeningCriteria(
-            min_daily_rewards=Decimal("100"),
-            max_competition_density=Decimal("0.3"),
+            min_daily_rewards=100,
+            max_competition_density=0.3,
             max_risk_level="low",
         )
 
-        assert criteria.min_daily_rewards == Decimal("100")
-        assert criteria.max_competition_density == Decimal("0.3")
+        assert criteria.min_daily_rewards == 100
+        assert criteria.max_competition_density == 0.3
         assert criteria.max_risk_level == "low"
 
 
@@ -34,7 +33,7 @@ class TestPolymarketScreener:
     def setup_method(self):
         self.mock_client = Mock(spec=Client)
         self.criteria = ScreeningCriteria(
-            min_daily_rewards=Decimal("20"), max_competition_density=Decimal("0.8")
+            min_daily_rewards=20, max_competition_density=0.8
         )
         self.screener = PolymarketScreener(self.mock_client, self.criteria)
 
@@ -104,48 +103,48 @@ class TestPolymarketScreener:
         # Create mock orderbooks
         yes_orderbook = OrderbookSnapshot(
             asset_id="yes_token",
-            bids=[OrderbookLevel(Decimal("0.52"), Decimal("100"))],
-            asks=[OrderbookLevel(Decimal("0.54"), Decimal("100"))],
-            midpoint=Decimal("0.53"),
-            spread=Decimal("0.02"),
+            bids=[OrderbookLevel(0.52, 100)],
+            asks=[OrderbookLevel(0.54, 100)],
+            midpoint=0.53,
+            spread=0.02,
         )
 
         no_orderbook = OrderbookSnapshot(
             asset_id="no_token",
-            bids=[OrderbookLevel(Decimal("0.46"), Decimal("100"))],
-            asks=[OrderbookLevel(Decimal("0.48"), Decimal("100"))],
-            midpoint=Decimal("0.47"),
-            spread=Decimal("0.02"),
+            bids=[OrderbookLevel(0.46, 100)],
+            asks=[OrderbookLevel(0.48, 100)],
+            midpoint=0.47,
+            spread=0.02,
         )
 
         density = self.screener._estimate_competition_density(
             yes_orderbook, no_orderbook, 0.03
         )
 
-        assert isinstance(density, Decimal)
-        assert Decimal("0") <= density <= Decimal("1")
+        assert isinstance(density, float)
+        assert 0 <= density <= 1
 
     def test_reward_score_calculation(self):
         score = self.screener._calculate_reward_score(
             total_daily_rewards=100.0,
             min_size=200.0,
-            competition_density=Decimal("0.3"),
+            competition_density=0.3,
             max_spread=0.03,
         )
 
-        assert isinstance(score, Decimal)
-        assert score > Decimal("0")
+        assert isinstance(score, float)
+        assert score > 0
 
     def test_risk_assessment(self):
         # Mock market object
         market = type("Market", (), {})()
 
         # Low risk scenario
-        risk_low = self.screener._assess_risk_level(market, Decimal("0.2"), 0.05)
+        risk_low = self.screener._assess_risk_level(market, 0.2, 0.05)
         assert risk_low in ["low", "medium", "high"]
 
         # High risk scenario
-        risk_high = self.screener._assess_risk_level(market, Decimal("0.8"), 0.01)
+        risk_high = self.screener._assess_risk_level(market, 0.8, 0.01)
         assert risk_high in ["low", "medium", "high"]
 
     def test_screening_criteria_check(self):
@@ -154,12 +153,12 @@ class TestPolymarketScreener:
             market=Mock(),
             yes_token=Mock(),
             no_token=Mock(),
-            reward_score=Decimal("100"),
-            competition_density=Decimal("0.3"),
-            estimated_daily_rewards=Decimal("60"),  # Above min of 20
-            min_capital_required=Decimal("200"),
-            max_spread_allowed=Decimal("0.03"),  # Above min of 0.02
-            recommended_position_size=Decimal("200"),
+            reward_score=100,
+            competition_density=0.3,
+            estimated_daily_rewards=60,  # Above min of 20
+            min_capital_required=200,
+            max_spread_allowed=0.03,  # Above min of 0.02
+            recommended_position_size=200,
             risk_level="low",
         )
 
@@ -170,12 +169,12 @@ class TestPolymarketScreener:
             market=Mock(),
             yes_token=Mock(),
             no_token=Mock(),
-            reward_score=Decimal("10"),
-            competition_density=Decimal("0.9"),  # Above max of 0.8
-            estimated_daily_rewards=Decimal("10"),  # Below min of 20
-            min_capital_required=Decimal("200"),
-            max_spread_allowed=Decimal("0.01"),  # Below min of 0.02
-            recommended_position_size=Decimal("200"),
+            reward_score=10,
+            competition_density=0.9,  # Above max of 0.8
+            estimated_daily_rewards=10,  # Below min of 20
+            min_capital_required=200,
+            max_spread_allowed=0.01,  # Below min of 0.02
+            recommended_position_size=200,
             risk_level="high",
         )
 
@@ -200,28 +199,28 @@ class TestPolymarketScreener:
         assert snapshot.asset_id == "test_asset"
         assert len(snapshot.bids) == 2
         assert len(snapshot.asks) == 2
-        assert snapshot.bids[0].price == Decimal("0.52")
-        assert snapshot.asks[0].price == Decimal("0.54")
-        assert snapshot.midpoint == Decimal("0.53")
-        assert snapshot.spread == Decimal("0.02")
+        assert snapshot.bids[0].price == 0.52
+        assert snapshot.asks[0].price == 0.54
+        assert snapshot.midpoint == 0.53
+        assert snapshot.spread == 0.02
 
     @patch.object(PolymarketScreener, "get_market_orderbooks")
     def test_analyze_market_opportunity(self, mock_get_orderbooks):
         # Mock orderbooks return
         yes_orderbook = OrderbookSnapshot(
             asset_id="yes_token",
-            bids=[OrderbookLevel(Decimal("0.52"), Decimal("100"))],
-            asks=[OrderbookLevel(Decimal("0.54"), Decimal("100"))],
-            midpoint=Decimal("0.53"),
-            spread=Decimal("0.02"),
+            bids=[OrderbookLevel(0.52, 100)],
+            asks=[OrderbookLevel(0.54, 100)],
+            midpoint=0.53,
+            spread=0.02,
         )
 
         no_orderbook = OrderbookSnapshot(
             asset_id="no_token",
-            bids=[OrderbookLevel(Decimal("0.46"), Decimal("100"))],
-            asks=[OrderbookLevel(Decimal("0.48"), Decimal("100"))],
-            midpoint=Decimal("0.47"),
-            spread=Decimal("0.02"),
+            bids=[OrderbookLevel(0.46, 100)],
+            asks=[OrderbookLevel(0.48, 100)],
+            midpoint=0.47,
+            spread=0.02,
         )
 
         mock_get_orderbooks.return_value = (yes_orderbook, no_orderbook)
@@ -245,8 +244,8 @@ class TestPolymarketScreener:
         assert opportunity is not None
         assert isinstance(opportunity, MarketOpportunity)
         assert opportunity.market == market
-        assert opportunity.reward_score > Decimal("0")
-        assert opportunity.estimated_daily_rewards == Decimal("100")
+        assert opportunity.reward_score > 0
+        assert opportunity.estimated_daily_rewards == 100
 
     def test_find_opportunities_integration(self):
         # Mock the client's get_sampling_markets method
@@ -316,17 +315,17 @@ class TestMarketOpportunity:
             market=market,
             yes_token=yes_token,
             no_token=no_token,
-            reward_score=Decimal("100"),
-            competition_density=Decimal("0.3"),
-            estimated_daily_rewards=Decimal("75"),
-            min_capital_required=Decimal("500"),
-            max_spread_allowed=Decimal("0.03"),
-            recommended_position_size=Decimal("500"),
+            reward_score=100,
+            competition_density=0.3,
+            estimated_daily_rewards=75,
+            min_capital_required=500,
+            max_spread_allowed=0.03,
+            recommended_position_size=500,
             risk_level="medium",
         )
 
         assert opportunity.market == market
-        assert opportunity.reward_score == Decimal("100")
+        assert opportunity.reward_score == 100
         assert opportunity.risk_level == "medium"
 
     def test_opportunity_to_dict(self):
@@ -345,12 +344,12 @@ class TestMarketOpportunity:
             market=market,
             yes_token=yes_token,
             no_token=no_token,
-            reward_score=Decimal("100"),
-            competition_density=Decimal("0.3"),
-            estimated_daily_rewards=Decimal("75"),
-            min_capital_required=Decimal("500"),
-            max_spread_allowed=Decimal("0.03"),
-            recommended_position_size=Decimal("500"),
+            reward_score=100,
+            competition_density=0.3,
+            estimated_daily_rewards=75,
+            min_capital_required=500,
+            max_spread_allowed=0.03,
+            recommended_position_size=500,
             risk_level="medium",
         )
 

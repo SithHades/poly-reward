@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any, Tuple
-from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 import logging
 import asyncio
@@ -32,14 +31,14 @@ class OrderMetrics:
     total_orders_placed: int = 0
     total_orders_filled: int = 0
     total_orders_cancelled: int = 0
-    total_volume_filled: Decimal = field(default=Decimal("0"))
-    fill_rate: Decimal = field(default=Decimal("0"))
+    total_volume_filled: float = field(default=0)
+    fill_rate: float = field(default=0)
     avg_fill_time: timedelta = field(default=timedelta())
 
     def update_fill_rate(self):
         """Update fill rate calculation"""
         if self.total_orders_placed > 0:
-            self.fill_rate = Decimal(self.total_orders_filled) / Decimal(
+            self.fill_rate = float(self.total_orders_filled) / float(
                 self.total_orders_placed
             )
 
@@ -130,8 +129,8 @@ class OrderManager:
 
     async def place_order(
         self,
-        price: Decimal,
-        size: Decimal,
+        price: float,
+        size: float,
         side: OrderSide,
         token_id: str,
         order_type: OrderType = OrderType.GTC,
@@ -303,11 +302,11 @@ class OrderManager:
             if self.client.paper_trading:
                 # Paper trading simulation
                 current_status = OrderStatus.OPEN
-                filled_size = Decimal("0")
+                filled_size = 0
             else:
                 # Real status from API
                 status_str = status_response.get("status", "").lower()
-                filled_size = Decimal(str(status_response.get("size_matched", "0")))
+                filled_size = float(status_response.get("size_matched", 0))
 
                 if status_str == "matched":
                     current_status = OrderStatus.FILLED
@@ -416,7 +415,7 @@ class OrderManager:
             # Generate new orders if conditions are favorable
             yes_orderbook = market_data.get("yes_orderbook")
             no_orderbook = market_data.get("no_orderbook")
-            available_capital = market_data.get("available_capital", Decimal("1000"))
+            available_capital = market_data.get("available_capital", 1000)
 
             if yes_orderbook and no_orderbook:
                 new_orders = self.strategy.calculate_optimal_orders(
@@ -522,7 +521,7 @@ class OrderManager:
 
         if market_id not in self.positions:
             self.positions[market_id] = Position(
-                market_id=market_id, size=Decimal("0"), entry_price=order.price
+                market_id=market_id, size=0, entry_price=order.price
             )
 
         position = self.positions[market_id]
@@ -562,7 +561,7 @@ class OrderManager:
             managed_order.hedge_pending = False
 
     def _validate_order(
-        self, price: Decimal, size: Decimal, side: OrderSide, token_id: str
+        self, price: float, size: float, side: OrderSide, token_id: str
     ) -> bool:
         """Validate order parameters"""
         if price <= 0:
@@ -573,11 +572,11 @@ class OrderManager:
             self.logger.error("Size must be positive")
             return False
 
-        if price > Decimal("0.99"):
+        if price > 0.99:
             self.logger.error("Price too high (max 0.99)")
             return False
 
-        if price < Decimal("0.01"):
+        if price < 0.01:
             self.logger.error("Price too low (min 0.01)")
             return False
 

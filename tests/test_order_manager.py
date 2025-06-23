@@ -1,6 +1,5 @@
 import pytest
 from unittest.mock import Mock
-from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 
 from src.order_manager import (
@@ -74,8 +73,8 @@ class TestOrderManager:
     async def test_place_order_success(self):
         """Test successful order placement"""
         order_id = await self.order_manager.place_order(
-            price=Decimal("0.55"),
-            size=Decimal("100"),
+            price=0.55,
+            size=100,
             side=OrderSide.BUY,
             token_id="token_123",
         )
@@ -98,8 +97,8 @@ class TestOrderManager:
         """Test order placement validation"""
         # Test negative price
         order_id = await self.order_manager.place_order(
-            price=Decimal("-0.10"),
-            size=Decimal("100"),
+            price=-0.10,
+            size=100,
             side=OrderSide.BUY,
             token_id="token_123",
         )
@@ -107,8 +106,8 @@ class TestOrderManager:
 
         # Test zero size
         order_id = await self.order_manager.place_order(
-            price=Decimal("0.55"),
-            size=Decimal("0"),
+            price=0.55,
+            size=0,
             side=OrderSide.BUY,
             token_id="token_123",
         )
@@ -116,8 +115,8 @@ class TestOrderManager:
 
         # Test price too high
         order_id = await self.order_manager.place_order(
-            price=Decimal("1.50"),
-            size=Decimal("100"),
+            price=1.50,
+            size=100,
             side=OrderSide.BUY,
             token_id="token_123",
         )
@@ -125,7 +124,7 @@ class TestOrderManager:
 
         # Test empty token_id
         order_id = await self.order_manager.place_order(
-            price=Decimal("0.55"), size=Decimal("100"), side=OrderSide.BUY, token_id=""
+            price=0.55, size=100, side=OrderSide.BUY, token_id=""
         )
         assert order_id is None
 
@@ -139,8 +138,8 @@ class TestOrderManager:
                 "status": "placed",
             }
             order_id = await self.order_manager.place_order(
-                price=Decimal("0.55"),
-                size=Decimal("100"),
+                price=0.55,
+                size=100,
                 side=OrderSide.BUY,
                 token_id="token_123",
             )
@@ -152,8 +151,8 @@ class TestOrderManager:
             "status": "placed",
         }
         order_id = await self.order_manager.place_order(
-            price=Decimal("0.55"),
-            size=Decimal("100"),
+            price=0.55,
+            size=100,
             side=OrderSide.BUY,
             token_id="token_123",
         )
@@ -166,8 +165,8 @@ class TestOrderManager:
         self.mock_client.place_order.return_value = {"error": "API Error"}
 
         order_id = await self.order_manager.place_order(
-            price=Decimal("0.55"),
-            size=Decimal("100"),
+            price=0.55,
+            size=100,
             side=OrderSide.BUY,
             token_id="token_123",
         )
@@ -189,8 +188,8 @@ class TestOrderManager:
         }
 
         order_id = await self.order_manager.place_order(
-            price=Decimal("0.55"),
-            size=Decimal("100"),
+            price=0.55,
+            size=100,
             side=OrderSide.BUY,
             token_id="token_123",
         )
@@ -204,8 +203,8 @@ class TestOrderManager:
         """Test successful order cancellation"""
         # First place an order
         order_id = await self.order_manager.place_order(
-            price=Decimal("0.55"),
-            size=Decimal("100"),
+            price=0.55,
+            size=100,
             side=OrderSide.BUY,
             token_id="token_123",
         )
@@ -233,8 +232,8 @@ class TestOrderManager:
         """Test order cancellation when client fails"""
         # Place an order first
         order_id = await self.order_manager.place_order(
-            price=Decimal("0.55"),
-            size=Decimal("100"),
+            price=0.55,
+            size=100,
             side=OrderSide.BUY,
             token_id="token_123",
         )
@@ -257,8 +256,8 @@ class TestOrderManager:
                 "status": "placed",
             }
             order_id = await self.order_manager.place_order(
-                price=Decimal("0.55"),
-                size=Decimal("100"),
+                price=0.55,
+                size=100,
                 side=OrderSide.BUY,
                 token_id="token_123",
             )
@@ -280,8 +279,8 @@ class TestOrderManager:
         """Test updating order status to filled"""
         # Place an order
         order_id = await self.order_manager.place_order(
-            price=Decimal("0.55"),
-            size=Decimal("100"),
+            price=0.55,
+            size=100,
             side=OrderSide.BUY,
             token_id="token_123",
         )
@@ -298,15 +297,15 @@ class TestOrderManager:
         assert len(self.order_manager.active_orders) == 0
         assert len(self.order_manager.completed_orders) == 1
         assert self.order_manager.order_metrics.total_orders_filled == 1
-        assert self.order_manager.order_metrics.total_volume_filled == Decimal("100")
+        assert self.order_manager.order_metrics.total_volume_filled == 100
 
     @pytest.mark.asyncio
     async def test_update_order_status_partially_filled(self):
         """Test updating order status to partially filled"""
         # Place an order
         order_id = await self.order_manager.place_order(
-            price=Decimal("0.55"),
-            size=Decimal("100"),
+            price=0.55,
+            size=100,
             side=OrderSide.BUY,
             token_id="token_123",
         )
@@ -324,15 +323,15 @@ class TestOrderManager:
 
         managed_order = list(self.order_manager.active_orders.values())[0]
         assert managed_order.order.status == OrderStatus.PARTIALLY_FILLED
-        assert managed_order.order.filled_size == Decimal("50")
+        assert managed_order.order.filled_size == 50
 
     @pytest.mark.asyncio
     async def test_update_order_status_client_error(self):
         """Test updating order status when client returns error"""
         # Place an order
         order_id = await self.order_manager.place_order(
-            price=Decimal("0.55"),
-            size=Decimal("100"),
+            price=0.55,
+            size=100,
             side=OrderSide.BUY,
             token_id="token_123",
         )
@@ -349,16 +348,16 @@ class TestOrderManager:
         # Setup mock strategy to return new orders
         mock_orderbook = OrderbookSnapshot(
             asset_id="token_123",
-            bids=[OrderbookLevel(Decimal("0.52"), Decimal("100"))],
-            asks=[OrderbookLevel(Decimal("0.54"), Decimal("100"))],
-            midpoint=Decimal("0.53"),
-            spread=Decimal("0.02"),
+            bids=[OrderbookLevel(0.52, 100)],
+            asks=[OrderbookLevel(0.54, 100)],
+            midpoint=0.53,
+            spread=0.02,
         )
 
         self.mock_strategy.calculate_optimal_orders.return_value = [
             {
-                "price": Decimal("0.52"),
-                "size": Decimal("100"),
+                "price": 0.52,
+                "size": 100,
                 "side": OrderSide.BUY,
                 "asset_id": "token_123",
                 "market_type": "YES",
@@ -369,7 +368,7 @@ class TestOrderManager:
             "asset_id": "token_123",
             "yes_orderbook": mock_orderbook,
             "no_orderbook": mock_orderbook,
-            "available_capital": Decimal("1000"),
+            "available_capital": 1000,
         }
 
         summary = await self.order_manager.manage_order_lifecycle(market_data)
@@ -383,8 +382,8 @@ class TestOrderManager:
         """Test lifecycle management with risk-based cancellations"""
         # Place an order first
         order_id = await self.order_manager.place_order(
-            price=Decimal("0.55"),
-            size=Decimal("100"),
+            price=0.55,
+            size=100,
             side=OrderSide.BUY,
             token_id="token_123",
         )
@@ -409,12 +408,12 @@ class TestOrderManager:
         self.order_manager.order_metrics.total_orders_placed = 5
         self.order_manager.order_metrics.total_orders_filled = 3
         self.order_manager.order_metrics.total_orders_cancelled = 1
-        self.order_manager.order_metrics.total_volume_filled = Decimal("300")
+        self.order_manager.order_metrics.total_volume_filled = 300
         self.order_manager.order_metrics.update_fill_rate()
 
         # Add a position
         self.order_manager.positions["token_123"] = Position(
-            market_id="token_123", size=Decimal("100"), entry_price=Decimal("0.55")
+            market_id="token_123", size=100, entry_price=0.55
         )
 
         summary = self.order_manager.get_order_status_summary()
@@ -433,10 +432,10 @@ class TestOrderManager:
             id="test_order",
             market_id="token_123",
             side=OrderSide.BUY,
-            price=Decimal("0.55"),
-            size=Decimal("100"),
+            price=0.55,
+            size=100,
             status=OrderStatus.OPEN,
-            filled_size=Decimal("50"),
+            filled_size=50,
         )
 
         managed_order = ManagedOrder(
@@ -463,7 +462,7 @@ class TestOrderManager:
         # Valid order
         assert (
             self.order_manager._validate_order(
-                Decimal("0.55"), Decimal("100"), OrderSide.BUY, "token_123"
+                0.55, 100, OrderSide.BUY, "token_123"
             )
             is True
         )
@@ -471,28 +470,28 @@ class TestOrderManager:
         # Invalid orders
         assert (
             self.order_manager._validate_order(
-                Decimal("0"), Decimal("100"), OrderSide.BUY, "token_123"
+                0, 100, OrderSide.BUY, "token_123"
             )
             is False
         )
 
         assert (
             self.order_manager._validate_order(
-                Decimal("0.55"), Decimal("0"), OrderSide.BUY, "token_123"
+                0.55, 0, OrderSide.BUY, "token_123"
             )
             is False
         )
 
         assert (
             self.order_manager._validate_order(
-                Decimal("1.50"), Decimal("100"), OrderSide.BUY, "token_123"
+                1.50, 100, OrderSide.BUY, "token_123"
             )
             is False
         )
 
         assert (
             self.order_manager._validate_order(
-                Decimal("0.55"), Decimal("100"), OrderSide.BUY, ""
+                0.55, 100, OrderSide.BUY, ""
             )
             is False
         )
@@ -503,18 +502,18 @@ class TestOrderManager:
             id="test_order",
             market_id="token_123",
             side=OrderSide.BUY,
-            price=Decimal("0.55"),
-            size=Decimal("100"),
+            price=0.55,
+            size=100,
             status=OrderStatus.FILLED,
-            filled_size=Decimal("100"),
+            filled_size=100,
         )
 
         self.order_manager._update_position(order)
 
         assert "token_123" in self.order_manager.positions
         position = self.order_manager.positions["token_123"]
-        assert position.size == Decimal("100")
-        assert position.entry_price == Decimal("0.55")
+        assert position.size == 100
+        assert position.entry_price == 0.55
 
     def test_update_position_sell_order(self):
         """Test position update for sell order"""
@@ -523,10 +522,10 @@ class TestOrderManager:
             id="buy_order",
             market_id="token_123",
             side=OrderSide.BUY,
-            price=Decimal("0.55"),
-            size=Decimal("150"),
+            price=0.55,
+            size=150,
             status=OrderStatus.FILLED,
-            filled_size=Decimal("150"),
+            filled_size=150,
         )
         self.order_manager._update_position(buy_order)
 
@@ -535,15 +534,15 @@ class TestOrderManager:
             id="sell_order",
             market_id="token_123",
             side=OrderSide.SELL,
-            price=Decimal("0.60"),
-            size=Decimal("50"),
+            price=0.60,
+            size=50,
             status=OrderStatus.FILLED,
-            filled_size=Decimal("50"),
+            filled_size=50,
         )
         self.order_manager._update_position(sell_order)
 
         position = self.order_manager.positions["token_123"]
-        assert position.size == Decimal("100")  # 150 - 50
+        assert position.size == 100  # 150 - 50
 
 
 class TestManagedOrder:
@@ -553,8 +552,8 @@ class TestManagedOrder:
             id="test_order",
             market_id="token_123",
             side=OrderSide.BUY,
-            price=Decimal("0.55"),
-            size=Decimal("100"),
+            price=0.55,
+            size=100,
             status=OrderStatus.PENDING,
         )
 
@@ -588,8 +587,8 @@ class TestOrderMetrics:
         assert metrics.total_orders_placed == 0
         assert metrics.total_orders_filled == 0
         assert metrics.total_orders_cancelled == 0
-        assert metrics.total_volume_filled == Decimal("0")
-        assert metrics.fill_rate == Decimal("0")
+        assert metrics.total_volume_filled == 0
+        assert metrics.fill_rate == 0
 
     def test_fill_rate_calculation(self):
         """Test fill rate calculation"""
@@ -599,11 +598,11 @@ class TestOrderMetrics:
 
         metrics.update_fill_rate()
 
-        assert metrics.fill_rate == Decimal("0.7")
+        assert metrics.fill_rate == 0.7
 
     def test_fill_rate_zero_orders(self):
         """Test fill rate when no orders placed"""
         metrics = OrderMetrics()
         metrics.update_fill_rate()
 
-        assert metrics.fill_rate == Decimal("0")
+        assert metrics.fill_rate == 0
