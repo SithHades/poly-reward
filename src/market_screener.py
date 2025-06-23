@@ -215,7 +215,7 @@ class PolymarketScreener:
                 return False
 
             # Check if rewards exist
-            if not market.rewards or not market.rewards.rates:
+            if not market.rewards:
                 return False
 
             return True
