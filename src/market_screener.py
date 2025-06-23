@@ -166,14 +166,11 @@ class PolymarketScreener:
             Tuple of (yes_orderbook, no_orderbook)
         """
         try:
-            yes_token = None
-            no_token = None
-
-            for token in market.tokens:
-                if token.outcome.lower() == "yes":
-                    yes_token = token
-                elif token.outcome.lower() == "no":
-                    no_token = token
+            if len(market.tokens) != 2:
+                self.logger.error(f"Market {market.question_id} does not have exactly 2 tokens")
+                return None, None
+            yes_token = market.tokens[0]
+            no_token = market.tokens[1]
 
             if not yes_token or not no_token:
                 self.logger.error(f"Market {market.question_id} missing YES/NO tokens")
@@ -199,7 +196,7 @@ class PolymarketScreener:
             )
             return None, None
 
-    def _passes_basic_criteria(self, market) -> bool:
+    def _passes_basic_criteria(self, market: Market) -> bool:
         """Quick filtering based on basic criteria"""
         try:
             # Check if market is active and accepting orders
@@ -224,7 +221,7 @@ class PolymarketScreener:
             self.logger.error(f"Error in basic criteria check: {e}")
             return False
 
-    def _analyze_market_opportunity(self, market) -> Optional[MarketOpportunity]:
+    def _analyze_market_opportunity(self, market: Market) -> Optional[MarketOpportunity]:
         """Perform detailed analysis of a market opportunity"""
         try:
             rewards = market.rewards
@@ -233,31 +230,26 @@ class PolymarketScreener:
             if not rewards or not tokens:
                 return None
 
-            # Find YES and NO tokens - client returns proper Token objects
-            yes_token = None
-            no_token = None
-
-            for token in tokens:
-                if token.outcome.lower() == "yes":
-                    yes_token = token
-                elif token.outcome.lower() == "no":
-                    no_token = token
+            if len(tokens) != 2:
+                self.logger.error(f"Market {market.question_id} does not have exactly 2 tokens")
+                return None
+            yes_token = tokens[0]
+            no_token = tokens[1]
 
             if not yes_token or not no_token:
                 return None
 
-            # Calculate reward metrics - client returns structured data
-            total_daily_rewards = sum(rate.rewards_daily_rate for rate in rewards.rates)
-
+            # Calculate reward metrics
+            total_daily_rewards = rewards.rewards_daily_rate
             min_size_for_rewards = rewards.min_size
-            max_spread = rewards.max_spread
+            max_scoring_spread = rewards.max_spread
 
             # Get orderbook data for competition analysis
             yes_orderbook, no_orderbook = self.get_market_orderbooks(market)
 
             # Calculate competition density (simplified)
             competition_density = self._estimate_competition_density(
-                yes_orderbook, no_orderbook, max_spread
+                yes_orderbook, no_orderbook, max_scoring_spread
             )
 
             # Calculate reward score (combination of rewards, competition, capital efficiency)
@@ -265,7 +257,7 @@ class PolymarketScreener:
                 total_daily_rewards,
                 min_size_for_rewards,
                 competition_density,
-                max_spread,
+                max_scoring_spread,
             )
 
             # Estimate capital requirements
@@ -276,7 +268,7 @@ class PolymarketScreener:
 
             # Risk assessment
             risk_level = self._assess_risk_level(
-                market, competition_density, max_spread
+                market, competition_density, max_scoring_spread
             )
 
             # Create opportunity object
@@ -288,7 +280,7 @@ class PolymarketScreener:
                 competition_density=competition_density,
                 estimated_daily_rewards=Decimal(str(total_daily_rewards)),
                 min_capital_required=min_capital_required,
-                max_spread_allowed=Decimal(str(max_spread)),
+                max_spread_allowed=Decimal(str(max_scoring_spread)),
                 recommended_position_size=min_capital_required,
                 risk_level=risk_level,
             )
@@ -303,7 +295,7 @@ class PolymarketScreener:
         self,
         yes_orderbook: Optional[OrderbookSnapshot],
         no_orderbook: Optional[OrderbookSnapshot],
-        max_spread: float,
+        max_scoring_spread: float,
     ) -> Decimal:
         """Estimate competition density in the reward-earning spread"""
         if not yes_orderbook or not no_orderbook:
@@ -311,7 +303,7 @@ class PolymarketScreener:
 
         try:
             # Calculate volume in the reward spread around midpoint
-            spread_range = Decimal(str(max_spread))
+            spread_range = Decimal(str(max_scoring_spread))
             yes_mid = yes_orderbook.midpoint
 
             # Volume in reward range
