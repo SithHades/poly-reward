@@ -9,6 +9,7 @@ dependencies = [
     "ccxt>=4.4.91",
     "dependency-injector>=4.47.1",
     "pandas>=2.3.0",
+    "plotly>=6.1.2",
     "py-clob-client>=0.23.0",
     "pydantic>=2.11.7",
     "pytest-asyncio>=1.0.0",

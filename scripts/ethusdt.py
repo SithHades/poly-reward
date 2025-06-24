@@ -5,6 +5,10 @@ import ccxt
 import pandas as pd
 import time
 
+import plotly.express as px
+import plotly.graph_objects as go
+
+
 exchange = ccxt.binance()
 symbol = 'ETH/USDT'
 timeframe = '1m'
@@ -134,8 +138,6 @@ except Exception as e:
 # In[6]:
 
 
-import plotly.graph_objects as go
-
 def plot_resampled_with_ma(df, ma, title):
         fig = go.Figure()
 
@@ -227,8 +229,6 @@ print(f"\nProbability of a candle flipping from UP (> {threshold}%) at 45min to 
 
 # In[9]:
 
-
-import plotly.express as px
 
 # Histogram: delta_45_pct vs flipped
 fig = px.histogram(
