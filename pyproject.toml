@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "aiohttp>=3.12.13",
+    "ccxt>=4.4.91",
     "dependency-injector>=4.47.1",
     "pandas>=2.3.0",
     "py-clob-client>=0.23.0",

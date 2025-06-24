@@ -23,7 +23,7 @@ while True:
 df = pd.DataFrame(all_ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
 df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
 df = df.set_index('timestamp')
-display(df.head())
+print(df.head())
 
 
 # In[2]:
@@ -45,7 +45,7 @@ try:
         }])
         live_data_df = live_data_df.set_index('timestamp')
         print("Successfully fetched live price data:")
-        display(live_data_df)
+        print(live_data_df)
     else:
         print("Could not retrieve 'last' price from ticker data.")
 except Exception as e:
@@ -73,8 +73,8 @@ if not combined_df.empty:
 
     combined_df = combined_df.sort_index(ascending=True)
     combined_df = combined_df[~combined_df.index.duplicated(keep='last')]
-    display(combined_df.head())
-    display(combined_df.tail())
+    print(combined_df.head())
+    print(combined_df.tail())
 else:
     print("Cannot process an empty combined DataFrame.")
 
@@ -98,11 +98,11 @@ else:
 
     # Display the head of the resampled DataFrames
     print("5-minute resampled data:")
-    display(df_5min.head())
+    print(df_5min.head())
     print("\n15-minute resampled data:")
-    display(df_15min.head())
+    print(df_15min.head())
     print("\n1-hour resampled data:")
-    display(df_1h.head())
+    print(df_1h.head())
 
 
 # In[5]:
