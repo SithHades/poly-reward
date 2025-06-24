@@ -409,7 +409,7 @@ class TestIntegrationScenarios:
         )
 
         # Should detect as volatile
-        condition = self.strategy.analyze_market_condition(
+        _ = self.strategy.analyze_market_condition(
             volatile_orderbook, volatile_orderbook
         )
         # Note: Would need to implement proper volatility detection in _is_market_volatile
