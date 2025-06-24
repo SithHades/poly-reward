@@ -166,7 +166,9 @@ class PolymarketScreener:
         """
         try:
             if len(market.tokens) != 2:
-                self.logger.error(f"Market {market.question_id} does not have exactly 2 tokens")
+                self.logger.error(
+                    f"Market {market.question_id} does not have exactly 2 tokens"
+                )
                 return None, None
             yes_token = market.tokens[0]
             no_token = market.tokens[1]
@@ -220,7 +222,9 @@ class PolymarketScreener:
             self.logger.error(f"Error in basic criteria check: {e}")
             return False
 
-    def _analyze_market_opportunity(self, market: Market) -> Optional[MarketOpportunity]:
+    def _analyze_market_opportunity(
+        self, market: Market
+    ) -> Optional[MarketOpportunity]:
         """Perform detailed analysis of a market opportunity"""
         try:
             rewards = market.rewards
@@ -230,7 +234,9 @@ class PolymarketScreener:
                 return None
 
             if len(tokens) != 2:
-                self.logger.error(f"Market {market.question_id} does not have exactly 2 tokens")
+                self.logger.error(
+                    f"Market {market.question_id} does not have exactly 2 tokens"
+                )
                 return None
             yes_token = tokens[0]
             no_token = tokens[1]

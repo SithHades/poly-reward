@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 import os
 from typing import Optional
@@ -19,8 +20,15 @@ from py_clob_client.constants import POLYGON
 from py_clob_client.exceptions import PolyApiException
 from py_clob_client.order_builder.builder import BUY, SELL
 from ratelimit import limits, sleep_and_retry
+import requests
 
-from src.parsing_utils import map_market, map_simplified_market
+from src.parsing_utils import (
+    ET_TZ,
+    extract_datetime_from_slug,
+    map_market,
+    map_simplified_market,
+    transform_gamma_market_to_simplified,
+)
 from src.constants import DEFAULT_MIDPOINT, DEFAULT_SPREAD, DEFAULT_TICK_SIZE
 from src.models import (
     BookSide,
@@ -74,7 +82,7 @@ class Client:
             "get_simplified_markets": (50, 10),
             "post_order": (500, 10),
             "post_orders": (500, 10),
-            "cancel_order": (500, 10),
+            "cancel": (500, 10),
             "cancel_orders": (500, 10),
             "cancel_all": (500, 10),
         }
@@ -111,9 +119,11 @@ class Client:
         :return: Dictionary mapping tokens to their midpoints.
         """
         self.logger.info(f"Getting midpoints for tokens: {tokens}")
-        midpoint_data = self.client.get_midpoints([BookParams(token) for token in tokens])
+        midpoint_data = self.client.get_midpoints(
+            [BookParams(token) for token in tokens]
+        )
         midpoints: dict[str, float] = {}
-         # Convert midpoint data to a dictionary with token as key and midpoint as value
+        # Convert midpoint data to a dictionary with token as key and midpoint as value
         for token, midpoint in midpoint_data.items():
             try:
                 midpoints[token] = float(midpoint)
@@ -637,6 +647,75 @@ class Client:
                 return markets
             else:
                 return []
+
+    def get_newest_future_series_markets(
+        self, id: Optional[str] = None, slug: Optional[str] = None, limit: int = 10
+    ):
+        """
+        Get the newest future series markets.
+        :param limit: The maximum number of markets to return.
+        :return: List of the newest future series markets.
+        """
+        if not id and not slug:
+            raise ValueError("Either 'id' or 'slug' must be provided.")
+        res = requests.get("https://gamma-api.polymarket.com/series")
+        if res.status_code != 200:
+            self.logger.error(f"Failed to fetch series markets: {res.text}")
+            return []
+        series_data = res.json()
+        series = next(
+            (s for s in series_data if s.get("id") == id or s.get("slug") == slug),
+            None,
+        )
+        events = series.get("events", []) if series else []
+        now = datetime.now(tz=ET_TZ)
+        # order by the extracted datetime from the slug
+        filtered_events = [
+            d
+            for d in events
+            if (dt := extract_datetime_from_slug(d["slug"])) and dt > now
+        ]
+
+        def event_sort_key(event):
+            dt = extract_datetime_from_slug(event["slug"])
+            # fallback to datetime.min if parsing fails
+            return (dt or datetime.min.replace(tzinfo=ET_TZ), event["slug"])
+
+        filtered_events.sort(key=event_sort_key, reverse=False)
+        filtered_events = filtered_events[:limit]
+        # Batch the requests to a maximum of 20 slugs per request
+        raw_markets = []
+        for i in range(0, len(filtered_events), 20):
+            batch = filtered_events[i : i + 20]
+            query_params = "&".join(f"slug={event['slug']}" for event in batch)
+            resp = requests.get(
+                f"https://gamma-api.polymarket.com/markets?{query_params}"
+            )
+            if resp.status_code != 200:
+                self.logger.error(f"Failed to fetch markets batch: {resp.text}")
+                continue
+            batch_data = resp.json()
+            if batch_data:
+                raw_markets.extend(batch_data)
+        if not raw_markets:
+            self.logger.error("No markets found for the given series.")
+            return []
+        # sort raw markets by slug to timestamp again, as the API does not guarantee order
+        raw_markets.sort(
+            key=lambda x: extract_datetime_from_slug(x.get("slug", ""))
+            or datetime.min.replace(tzinfo=ET_TZ)
+        )
+        markets = []
+        try:
+            for market in raw_markets:
+                if isinstance(market, dict):
+                    markets.append(transform_gamma_market_to_simplified(market))
+                else:
+                    self.logger.error(f"Unexpected data type: {type(market)}")
+        except Exception as e:
+            self.logger.error(f"Error transforming markets: {e}")
+            return []
+        return markets
 
 
 if __name__ == "__main__":

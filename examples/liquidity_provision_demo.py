@@ -278,17 +278,13 @@ def demo_portfolio_analysis():
 
     # Mock portfolio positions
     positions = {
-        "market_1": Position(
-            market_id="market_1", size=150, entry_price=0.55
-        ),
+        "market_1": Position(market_id="market_1", size=150, entry_price=0.55),
         "market_2": Position(
             market_id="market_2",
             size=-200,  # Short position
             entry_price=0.45,
         ),
-        "market_3": Position(
-            market_id="market_3", size=100, entry_price=0.60
-        ),
+        "market_3": Position(market_id="market_3", size=100, entry_price=0.60),
     }
 
     # Mock current prices

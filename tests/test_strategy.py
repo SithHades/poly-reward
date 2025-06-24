@@ -51,15 +51,11 @@ class TestOrderbookSnapshot:
         )
 
         # Test bid volume in range 0.49-0.51
-        bid_volume = orderbook.total_bid_volume_in_range(
-            (0.49, 0.51)
-        )
+        bid_volume = orderbook.total_bid_volume_in_range((0.49, 0.51))
         assert bid_volume == 300  # 100 + 200
 
         # Test ask volume in range 0.55-0.57
-        ask_volume = orderbook.total_ask_volume_in_range(
-            (0.55, 0.57)
-        )
+        ask_volume = orderbook.total_ask_volume_in_range((0.55, 0.57))
         assert ask_volume == 750  # 150 + 250 + 350
 
 
@@ -80,12 +76,8 @@ class TestVolatilityMetrics:
         assert len(metrics.spread_changes) == 2
 
         # Test volatility detection
-        assert metrics.is_volatile(
-            0.02, 0.05
-        )  # Should be volatile
-        assert not metrics.is_volatile(
-            0.05, 0.1
-        )  # Should not be volatile
+        assert metrics.is_volatile(0.02, 0.05)  # Should be volatile
+        assert not metrics.is_volatile(0.05, 0.1)  # Should not be volatile
 
     def test_window_maintenance(self):
         metrics = VolatilityMetrics()
@@ -404,9 +396,7 @@ class TestIntegrationScenarios:
 
         # Add volatility history
         self.strategy.volatility_tracker["volatile_test"] = VolatilityMetrics()
-        self.strategy.volatility_tracker["volatile_test"].add_midpoint_change(
-            0.1
-        )
+        self.strategy.volatility_tracker["volatile_test"].add_midpoint_change(0.1)
 
         # Should detect as volatile
         _ = self.strategy.analyze_market_condition(

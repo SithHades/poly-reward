@@ -41,18 +41,14 @@ class OrderbookSnapshot:
     def best_ask(self) -> Optional[float]:
         return self.asks[0].price if self.asks else None
 
-    def total_bid_volume_in_range(
-        self, price_range: Tuple[float, float]
-    ) -> float:
+    def total_bid_volume_in_range(self, price_range: Tuple[float, float]) -> float:
         """Calculate total bid volume within price range"""
         min_price, max_price = price_range
         return sum(
             level.size for level in self.bids if min_price <= level.price <= max_price
         )
 
-    def total_ask_volume_in_range(
-        self, price_range: tuple[float, float]
-    ) -> float:
+    def total_ask_volume_in_range(self, price_range: tuple[float, float]) -> float:
         """Calculate total ask volume within price range"""
         min_price, max_price = price_range
         return sum(
@@ -69,7 +65,9 @@ class VolatilityMetrics:
     volume_spikes: list[float] = field(default_factory=list)
     last_update: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     window: int = 50
-    snapshots: list["OrderbookSnapshot"] = field(default_factory=list)  # Store recent snapshots
+    snapshots: list["OrderbookSnapshot"] = field(
+        default_factory=list
+    )  # Store recent snapshots
 
     def add_snapshot(self, snapshot: OrderbookSnapshot):
         """Add a new orderbook snapshot and update volatility metrics"""
@@ -86,7 +84,9 @@ class VolatilityMetrics:
             prev_ask_vol = sum(a.size for a in prev.asks)
             curr_bid_vol = sum(b.size for b in snapshot.bids)
             curr_ask_vol = sum(a.size for a in snapshot.asks)
-            volume_spike = abs((curr_bid_vol + curr_ask_vol) - (prev_bid_vol + prev_ask_vol))
+            volume_spike = abs(
+                (curr_bid_vol + curr_ask_vol) - (prev_bid_vol + prev_ask_vol)
+            )
             self.add_volume_spike(volume_spike)
         self.snapshots.append(snapshot)
         if len(self.snapshots) > self.window:

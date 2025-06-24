@@ -332,9 +332,7 @@ class TestOrder:
 
 class TestPosition:
     def test_position_creation(self):
-        position = Position(
-            market_id="market_1", size=10, entry_price=100.50
-        )
+        position = Position(market_id="market_1", size=10, entry_price=100.50)
         assert position.market_id == "market_1"
         assert position.size == 10
         assert position.entry_price == 100.50
@@ -345,14 +343,10 @@ class TestPosition:
 
     def test_position_validation_negative_entry_price(self):
         with pytest.raises(ValueError, match="Entry price must be positive"):
-            Position(
-                market_id="market_1", size=10, entry_price=-100.50
-            )
+            Position(market_id="market_1", size=10, entry_price=-100.50)
 
     def test_position_current_value(self):
-        position = Position(
-            market_id="market_1", size=10, entry_price=100.50
-        )
+        position = Position(market_id="market_1", size=10, entry_price=100.50)
         current_price = 105.00
         assert position.current_value(current_price) == 1050.00
 
@@ -362,9 +356,7 @@ class TestPosition:
 
     def test_position_pnl_long(self):
         # Long position
-        position = Position(
-            market_id="market_1", size=10, entry_price=100.00
-        )
+        position = Position(market_id="market_1", size=10, entry_price=100.00)
 
         # Price goes up - profit
         current_price = 105.00
@@ -376,9 +368,7 @@ class TestPosition:
 
     def test_position_pnl_short(self):
         # Short position
-        position = Position(
-            market_id="market_1", size=-10, entry_price=100.00
-        )
+        position = Position(market_id="market_1", size=-10, entry_price=100.00)
 
         # Price goes down - profit
         current_price = 95.00
@@ -389,16 +379,12 @@ class TestPosition:
         assert position.pnl(current_price) == -50.00
 
     def test_position_pnl_zero_size(self):
-        position = Position(
-            market_id="market_1", size=0, entry_price=100.00
-        )
+        position = Position(market_id="market_1", size=0, entry_price=100.00)
         current_price = 105.00
         assert position.pnl(current_price) == 0
 
     def test_position_pnl_percentage(self):
-        position = Position(
-            market_id="market_1", size=10, entry_price=100.00
-        )
+        position = Position(market_id="market_1", size=10, entry_price=100.00)
 
         # 5% gain
         current_price = 105.00
@@ -414,25 +400,19 @@ class TestPosition:
 
     def test_position_types(self):
         # Long position
-        long_position = Position(
-            market_id="market_1", size=10, entry_price=100.00
-        )
+        long_position = Position(market_id="market_1", size=10, entry_price=100.00)
         assert long_position.is_long()
         assert not long_position.is_short()
         assert not long_position.is_flat()
 
         # Short position
-        short_position = Position(
-            market_id="market_1", size=-10, entry_price=100.00
-        )
+        short_position = Position(market_id="market_1", size=-10, entry_price=100.00)
         assert not short_position.is_long()
         assert short_position.is_short()
         assert not short_position.is_flat()
 
         # Flat position
-        flat_position = Position(
-            market_id="market_1", size=0, entry_price=100.00
-        )
+        flat_position = Position(market_id="market_1", size=0, entry_price=100.00)
         assert not flat_position.is_long()
         assert not flat_position.is_short()
         assert flat_position.is_flat()
@@ -463,9 +443,7 @@ class TestPosition:
         assert reconstructed_position.metadata == position.metadata
 
     def test_position_json_serialization(self):
-        position = Position(
-            market_id="market_1", size=10, entry_price=100.50
-        )
+        position = Position(market_id="market_1", size=10, entry_price=100.50)
 
         # Test JSON round-trip
         json_str = position.to_json()

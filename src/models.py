@@ -21,9 +21,7 @@ class BookSide(str, Enum):
     SELL = "SELL"
 
 
-SidePriceMap = dict[
-    BookSide, float
-]  # mapping from BookSide to price for a given token
+SidePriceMap = dict[BookSide, float]  # mapping from BookSide to price for a given token
 PricesResponse = dict[Token, SidePriceMap]  # mapping from token_id to SidePriceMap
 
 

@@ -1,4 +1,11 @@
+import re
 from src.models import Market, Rewards, SimplifiedMarket, TokenInfo
+from dateutil import tz
+from dateutil.parser import parse as parse_date
+from datetime import datetime
+
+
+ET_TZ = tz.gettz("America/New_York")
 
 
 def map_market(raw: dict) -> Market:
@@ -69,3 +76,60 @@ def map_simplified_market(raw: dict) -> SimplifiedMarket:
         )
     except KeyError as e:
         raise ValueError(f"Missing required field in raw data: {e}") from e
+
+
+def transform_gamma_market_to_simplified(market: dict) -> SimplifiedMarket:
+    # Parse tokens
+    outcomes = eval(market.get("outcomes", "[]"))
+    prices = eval(market.get("outcomePrices", "[]"))
+    clob_ids = eval(market.get("clobTokenIds", "[]"))
+    tokens = [
+        TokenInfo(
+            token_id=clob_ids[i] if i < len(clob_ids) else "unknown",
+            outcome=outcomes[i],
+            price=float(prices[i]),
+        )
+        for i in range(min(len(outcomes), len(prices)))
+    ]
+
+    # Parse rewards
+    rewards = (
+        Rewards(
+            rewards_daily_rate=float(market.get("rewardsDailyRate", 0)),
+            min_size=float(market.get("rewardsMinSize", 0)),
+            max_spread=float(market.get("rewardsMaxSpread", 0)),
+        )
+        if any(
+            k in market
+            for k in ["rewardsMinSize", "rewardsMaxSpread", "rewardsDailyRate"]
+        )
+        else None
+    )
+
+    return SimplifiedMarket(
+        condition_id=market["conditionId"],
+        rewards=rewards,
+        tokens=tokens,
+        active=market.get("active", False),
+        closed=market.get("closed", False),
+        archived=market.get("archived", False),
+        accepting_orders=market.get("acceptingOrders", False),
+    )
+
+
+def extract_datetime_from_slug(slug):
+    match = re.search(r"([a-z]+)-(\d+)-(\d+)(am|pm)-et", slug)
+    if not match:
+        return None
+
+    month_str, day_str, hour_str, meridiem = match.groups()
+    try:
+        # Build a date string like "June 22 6am"
+        date_str = f"{month_str} {day_str} {hour_str}{meridiem}"
+        # Parse with current year, assume ET timezone
+        dt = parse_date(date_str + f" {datetime.now().year}", fuzzy=True).replace(
+            tzinfo=ET_TZ
+        )
+        return dt
+    except Exception:
+        return None

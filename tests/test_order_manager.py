@@ -461,40 +461,27 @@ class TestOrderManager:
         """Test order validation"""
         # Valid order
         assert (
-            self.order_manager._validate_order(
-                0.55, 100, OrderSide.BUY, "token_123"
-            )
+            self.order_manager._validate_order(0.55, 100, OrderSide.BUY, "token_123")
             is True
         )
 
         # Invalid orders
         assert (
-            self.order_manager._validate_order(
-                0, 100, OrderSide.BUY, "token_123"
-            )
+            self.order_manager._validate_order(0, 100, OrderSide.BUY, "token_123")
             is False
         )
 
         assert (
-            self.order_manager._validate_order(
-                0.55, 0, OrderSide.BUY, "token_123"
-            )
+            self.order_manager._validate_order(0.55, 0, OrderSide.BUY, "token_123")
             is False
         )
 
         assert (
-            self.order_manager._validate_order(
-                1.50, 100, OrderSide.BUY, "token_123"
-            )
+            self.order_manager._validate_order(1.50, 100, OrderSide.BUY, "token_123")
             is False
         )
 
-        assert (
-            self.order_manager._validate_order(
-                0.55, 100, OrderSide.BUY, ""
-            )
-            is False
-        )
+        assert self.order_manager._validate_order(0.55, 100, OrderSide.BUY, "") is False
 
     def test_update_position_buy_order(self):
         """Test position update for buy order"""

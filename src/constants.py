@@ -1,3 +1,7 @@
 DEFAULT_MIDPOINT = 0.5
 DEFAULT_SPREAD = 0.0
 DEFAULT_TICK_SIZE = 0.001
+
+INTERESTING_SERIES_SLUGS = {"ethusdt": "eth-up-or-down-hourly"}
+
+INTERESTING_SERIES_IDS = {"ethusdt": "10117"}
