@@ -11,7 +11,7 @@ from src.client import Client
 from src.strategy import (
     PolymarketLiquidityStrategy,
 )
-from py_clob_client.clob_types import OpenOrderParams, OrderType
+from py_clob_client.clob_types import OpenOrderParams
 
 
 class OrderLifecycleEvent(Enum):
@@ -310,16 +310,15 @@ class OrderManager:
                 # Order not found in open orders; treat as filled/cancelled/expired
                 # For now, mark as filled (could be improved with more info)
                 current_status = OrderStatus.FILLED
-                filled_size = getattr(managed_order.order, 'filled_size', 0)
+                filled_size = getattr(managed_order.order, "filled_size", 0)
             else:
                 # Map status from OrderDetails
                 current_status = order_details.status
                 filled_size = order_details.matched_size
 
             old_status = managed_order.order.status
-            if (
-                current_status != old_status
-                or filled_size != getattr(managed_order.order, 'filled_size', 0)
+            if current_status != old_status or filled_size != getattr(
+                managed_order.order, "filled_size", 0
             ):
                 managed_order.order.status = current_status
                 managed_order.order.filled_size = filled_size
@@ -516,7 +515,7 @@ class OrderManager:
             )
 
         position = self.positions[market_id]
-        filled_size = getattr(order, 'filled_size', 0)
+        filled_size = getattr(order, "filled_size", 0)
 
         if order.side == BookSide.BUY:
             position.size += filled_size

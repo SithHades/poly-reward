@@ -1,6 +1,5 @@
 from enum import Enum
 from typing import Annotated, Optional
-from dataclasses import dataclass
 
 from pydantic import BaseModel, Field, field_validator
 

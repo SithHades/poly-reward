@@ -10,7 +10,6 @@ from py_clob_client.clob_types import (
     OrderScoringParams,
     OrdersScoringParams,
     OpenOrderParams,
-    OrderArgs,
     OrderType,
     PostOrdersArgs,
     SignedOrder,
@@ -18,7 +17,6 @@ from py_clob_client.clob_types import (
 )
 from py_clob_client.constants import POLYGON
 from py_clob_client.exceptions import PolyApiException
-from py_clob_client.order_builder.builder import BUY, SELL
 from ratelimit import limits, sleep_and_retry
 import requests
 
@@ -361,20 +359,23 @@ class Client:
         self.logger.info("Getting all open orders")
         try:
             raw_orders = self.client.get_orders(params)
-            return [OrderDetails(
-                order_id=order.get('order_id', ''),
-                status=order.get('status', ''),
-                owner=order.get('owner', ''),
-                maker_address=order.get('maker_address', ''),
-                market_id=order.get('market_id', ''),
-                asset_id=order.get('asset_id', ''),
-                side=order.get('side', ''),
-                original_size=order.get('original_size', 0),
-                matched_size=order.get('matched_size', 0),
-                price=order.get('price', 0.0),
-                order_type=order.get('order_type', ''),
-                created_at=order.get('created_at', 0),
-            ) for order in raw_orders]
+            return [
+                OrderDetails(
+                    order_id=order.get("order_id", ""),
+                    status=order.get("status", ""),
+                    owner=order.get("owner", ""),
+                    maker_address=order.get("maker_address", ""),
+                    market_id=order.get("market_id", ""),
+                    asset_id=order.get("asset_id", ""),
+                    side=order.get("side", ""),
+                    original_size=order.get("original_size", 0),
+                    matched_size=order.get("matched_size", 0),
+                    price=order.get("price", 0.0),
+                    order_type=order.get("order_type", ""),
+                    created_at=order.get("created_at", 0),
+                )
+                for order in raw_orders
+            ]
         except Exception as e:
             self.logger.error(f"Error getting open orders: {e}")
             return []
