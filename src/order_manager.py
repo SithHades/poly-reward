@@ -5,12 +5,13 @@ import logging
 import asyncio
 from enum import Enum
 
-from src.models import Order, Position, OrderSide, OrderStatus
+from src.models import Order, Position, OrderSide, OrderStatus, OrderArgsModel, BookSide
+
 from src.client import Client
 from src.strategy import (
     PolymarketLiquidityStrategy,
 )
-from py_clob_client.clob_types import OrderType
+from py_clob_client.clob_types import OrderType, OpenOrderParams
 
 
 class OrderLifecycleEvent(Enum):
@@ -161,18 +162,18 @@ class OrderManager:
             return None
 
         try:
-            # Place order through client
             self.logger.info(
                 f"Placing order: {side.value} {size} at {price} for token {token_id}"
             )
 
-            order_id = self.client.place_order(
-                price=float(price),
-                size=float(size),
-                side=side.value,
+            order_args = OrderArgsModel(
                 token_id=token_id,
-                order_type=order_type,
+                price=price,
+                size=size,
+                side=BookSide(side.value),
             )
+            signed_order = self.client.create_order(order_args)
+            order_id = self.client.place_order(signed_order, order_type=order_type)
 
             if not order_id:
                 self.logger.error(f"Order placement failed: {order_id}")
@@ -188,7 +189,6 @@ class OrderManager:
                 metadata=metadata or {},
             )
 
-            # Create managed order
             managed_order = ManagedOrder(
                 order=order,
                 placement_time=datetime.now(timezone.utc),
@@ -198,7 +198,6 @@ class OrderManager:
                 OrderLifecycleEvent.PLACED, f"Placed {side.value} {size} at {price}"
             )
 
-            # Track order
             self.active_orders[order_id] = managed_order
             self.order_metrics.total_orders_placed += 1
 
@@ -229,25 +228,20 @@ class OrderManager:
         try:
             self.logger.info(f"Cancelling order {order_id}: {reason}")
 
-            # Cancel through client
-            response = self.client.cancel_order(order_id)
+            # Cancel through client (returns bool)
+            success = self.client.cancel_order(order_id)
 
-            if response and "error" not in response:
-                # Update order status
+            if success:
                 managed_order.order.status = OrderStatus.CANCELLED
                 managed_order.add_lifecycle_event(OrderLifecycleEvent.CANCELLED, reason)
-
-                # Move to completed orders
                 self.completed_orders[order_id] = managed_order
                 del self.active_orders[order_id]
-
                 self.order_metrics.total_orders_cancelled += 1
                 self.order_metrics.update_fill_rate()
-
                 self.logger.info(f"Order {order_id} cancelled successfully")
                 return True
             else:
-                self.logger.error(f"Failed to cancel order {order_id}: {response}")
+                self.logger.error(f"Failed to cancel order {order_id}")
                 return False
 
         except Exception as e:
@@ -292,34 +286,22 @@ class OrderManager:
         managed_order = self.active_orders[order_id]
 
         try:
-            # Get current status from client
-            status_response = self.client.get_order_status(order_id)
+            # Get all open orders and find the one with order_id
+            open_orders = self.client.get_orders(OpenOrderParams(id=order_id))
+            order_details = next(
+                (o for o in open_orders if o.order_id == order_id), None
+            )
 
-            if not status_response or "error" in status_response:
-                return False
-
-            # Parse status
-            if self.client.paper_trading:
-                # Paper trading simulation
-                current_status = OrderStatus.OPEN
-                filled_size = 0
+            if not order_details:
+                # Order not found in open orders; treat as filled/cancelled/expired
+                # For now, mark as filled (could be improved with more info)
+                current_status = OrderStatus.FILLED
+                filled_size = managed_order.order.size
             else:
-                # Real status from API
-                status_str = status_response.get("status", "").lower()
-                filled_size = float(status_response.get("size_matched", 0))
+                # Map status from OrderDetails
+                current_status = order_details.status
+                filled_size = order_details.matched_size
 
-                if status_str == "matched":
-                    current_status = OrderStatus.FILLED
-                elif status_str == "cancelled":
-                    current_status = OrderStatus.CANCELLED
-                elif filled_size > 0 and filled_size < managed_order.order.size:
-                    current_status = OrderStatus.PARTIALLY_FILLED
-                elif status_str == "open":
-                    current_status = OrderStatus.OPEN
-                else:
-                    current_status = OrderStatus.OPEN
-
-            # Update order if status changed
             old_status = managed_order.order.status
             if (
                 current_status != old_status
@@ -338,7 +320,6 @@ class OrderManager:
                         if current_status == OrderStatus.PARTIALLY_FILLED
                         else OrderLifecycleEvent.CANCELLED
                     )
-
                     managed_order.add_lifecycle_event(
                         event, f"Status: {old_status.value} -> {current_status.value}"
                     )
@@ -346,19 +327,15 @@ class OrderManager:
                         f"Order {order_id} status changed: {old_status.value} -> {current_status.value}"
                     )
 
-                # Handle filled orders
                 if current_status in [OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED]:
                     await self._handle_order_fill(managed_order)
 
-                # Move completed orders
                 if current_status in [OrderStatus.FILLED, OrderStatus.CANCELLED]:
                     self.completed_orders[order_id] = managed_order
                     del self.active_orders[order_id]
-
                     if current_status == OrderStatus.FILLED:
                         self.order_metrics.total_orders_filled += 1
                         self.order_metrics.total_volume_filled += filled_size
-
                     self.order_metrics.update_fill_rate()
 
             return True
