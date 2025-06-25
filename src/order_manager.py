@@ -8,9 +8,7 @@ from enum import Enum
 from src.models import OrderDetails, OrderStatus, OrderArgsModel, BookSide
 
 from src.client import Client
-from src.strategy import (
-    PolymarketLiquidityStrategy,
-)
+from src.strategy_base import BaseStrategy
 from py_clob_client.clob_types import OpenOrderParams
 
 
@@ -80,7 +78,7 @@ class OrderManager:
     def __init__(
         self,
         client: Client,
-        strategy: PolymarketLiquidityStrategy,
+        strategy: BaseStrategy,
         max_active_orders: int = 50,
         status_check_interval: int = 30,
         enable_auto_hedging: bool = True,

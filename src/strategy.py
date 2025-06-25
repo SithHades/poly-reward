@@ -1,154 +1,9 @@
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple, Any
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone, timedelta
-from enum import Enum
 import logging
-from src.models import BookSide, OrderDetails
-
-
-class MarketCondition(Enum):
-    """Market conditions for strategy decision making"""
-
-    ATTRACTIVE = "attractive"  # Low competition, good for LP
-    COMPETITIVE = "competitive"  # High competition, low reward share
-    VOLATILE = "volatile"  # High volatility, risk of fills
-    UNAVAILABLE = "unavailable"  # Outside parameters or errors
-
-
-@dataclass
-class OrderbookLevel:
-    """Represents a single level in the orderbook"""
-
-    price: float
-    size: float
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-
-
-@dataclass
-class OrderbookSnapshot:
-    """Complete orderbook snapshot for a market"""
-
-    asset_id: str
-    bids: List[OrderbookLevel]
-    asks: List[OrderbookLevel]
-    midpoint: float
-    spread: float
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-
-    def best_bid(self) -> Optional[float]:
-        return self.bids[0].price if self.bids else None
-
-    def best_ask(self) -> Optional[float]:
-        return self.asks[0].price if self.asks else None
-
-    def total_bid_volume_in_range(self, price_range: Tuple[float, float]) -> float:
-        """Calculate total bid volume within price range"""
-        min_price, max_price = price_range
-        return sum(
-            level.size for level in self.bids if min_price <= level.price <= max_price
-        )
-
-    def total_ask_volume_in_range(self, price_range: tuple[float, float]) -> float:
-        """Calculate total ask volume within price range"""
-        min_price, max_price = price_range
-        return sum(
-            level.size for level in self.asks if min_price <= level.price <= max_price
-        )
-
-
-@dataclass
-class VolatilityMetrics:
-    """Tracks market volatility indicators"""
-
-    midpoint_changes: list[float] = field(default_factory=list)
-    spread_changes: list[float] = field(default_factory=list)
-    volume_spikes: list[float] = field(default_factory=list)
-    last_update: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    window: int = 50
-    snapshots: list["OrderbookSnapshot"] = field(
-        default_factory=list
-    )  # Store recent snapshots
-
-    def add_snapshot(self, snapshot: OrderbookSnapshot):
-        """Add a new orderbook snapshot and update volatility metrics"""
-        if self.snapshots:
-            prev = self.snapshots[-1]
-            # Calculate midpoint change
-            midpoint_change = snapshot.midpoint - prev.midpoint
-            self.add_midpoint_change(midpoint_change)
-            # Calculate spread change
-            spread_change = snapshot.spread - prev.spread
-            self.add_spread_change(spread_change)
-            # Optionally, detect volume spikes (example: total volume difference)
-            prev_bid_vol = sum(b.size for b in prev.bids)
-            prev_ask_vol = sum(a.size for a in prev.asks)
-            curr_bid_vol = sum(b.size for b in snapshot.bids)
-            curr_ask_vol = sum(a.size for a in snapshot.asks)
-            volume_spike = abs(
-                (curr_bid_vol + curr_ask_vol) - (prev_bid_vol + prev_ask_vol)
-            )
-            self.add_volume_spike(volume_spike)
-        self.snapshots.append(snapshot)
-        if len(self.snapshots) > self.window:
-            self.snapshots.pop(0)
-        self.last_update = datetime.now(timezone.utc)
-
-    def add_midpoint_change(self, change: float):
-        """Add midpoint change and maintain time window"""
-        self._add_to_window(self.midpoint_changes, change)
-
-    def add_spread_change(self, change: float):
-        """Add spread change and maintain time window"""
-        self._add_to_window(self.spread_changes, change)
-
-    def add_volume_spike(self, volume: float):
-        """Add volume spike and maintain time window"""
-        self._add_to_window(self.volume_spikes, volume)
-
-    def _add_to_window(self, data_list: list[float], value: float):
-        """Add value and maintain time window (simplified - in reality would track timestamps)"""
-        data_list.append(value)
-        if len(data_list) > 50:  # Keep last 50 data points as proxy for time window
-            data_list.pop(0)
-        self.last_update = datetime.now(timezone.utc)
-
-    def is_volatile(
-        self,
-        midpoint_threshold: float = 0.02,
-        spread_threshold: float = 0.05,
-    ) -> bool:
-        """Determine if market is currently volatile"""
-        if not self.midpoint_changes and not self.spread_changes:
-            return False
-
-        # Check for recent significant midpoint moves
-        if self.midpoint_changes:
-            recent_midpoint_data = (
-                self.midpoint_changes[-10:]
-                if len(self.midpoint_changes) >= 10
-                else self.midpoint_changes
-            )
-            recent_midpoint_volatility = max(
-                abs(change) for change in recent_midpoint_data
-            )
-        else:
-            recent_midpoint_volatility = 0
-
-        # Check for recent spread expansion
-        if self.spread_changes:
-            recent_spread_data = (
-                self.spread_changes[-10:]
-                if len(self.spread_changes) >= 10
-                else self.spread_changes
-            )
-            recent_spread_volatility = max(abs(change) for change in recent_spread_data)
-        else:
-            recent_spread_volatility = 0
-
-        return (
-            recent_midpoint_volatility > midpoint_threshold
-            or recent_spread_volatility > spread_threshold
-        )
+from src.models import BookSide, MarketCondition, OrderDetails, OrderbookSnapshot, Position, VolatilityMetrics
+from src.strategy_base import BaseStrategy
 
 
 @dataclass
@@ -178,7 +33,7 @@ class LiquidityProvisionConfig:
     hedge_ratio: float = 1.0  # 1:1 hedging ratio
 
 
-class PolymarketLiquidityStrategy:
+class PolymarketLiquidityStrategy(BaseStrategy):
     """
     Advanced liquidity provision strategy for Polymarket
 
@@ -191,13 +46,14 @@ class PolymarketLiquidityStrategy:
     """
 
     def __init__(self, config: LiquidityProvisionConfig):
+        super().__init__()
         self.config = config
         self.logger = logging.getLogger("PolymarketLiquidityStrategy")
         self.volatility_tracker: Dict[str, VolatilityMetrics] = {}
         self.order_timestamps: Dict[str, datetime] = {}
 
     def analyze_market_condition(
-        self, yes_orderbook: OrderbookSnapshot, no_orderbook: OrderbookSnapshot
+        self, yes_orderbook: OrderbookSnapshot, no_orderbook: OrderbookSnapshot, **kwargs: Any
     ) -> MarketCondition:
         """
         Analyze market conditions to determine if suitable for liquidity provision
@@ -246,12 +102,13 @@ class PolymarketLiquidityStrategy:
             self.logger.error(f"Error analyzing market condition: {e}")
             return MarketCondition.UNAVAILABLE
 
-    def calculate_optimal_orders(
+    def calculate_orders(
         self,
         yes_orderbook: OrderbookSnapshot,
         no_orderbook: OrderbookSnapshot,
-        current_positions: dict[str, dict[str, Any]],
+        current_positions: Dict[str, Position],
         available_capital: float,
+        **kwargs: Any
     ) -> List[Dict[str, Any]]:
         """
         Calculate optimal liquidity provision orders
@@ -531,3 +388,90 @@ class PolymarketLiquidityStrategy:
             self.logger.error(f"Error calculating hedge orders: {e}")
 
         return hedge_orders
+
+    def on_fill(
+        self,
+        fill_event: OrderDetails,
+        yes_orderbook: OrderbookSnapshot,
+        no_orderbook: OrderbookSnapshot,
+        **kwargs: Any
+    ) -> List[Dict[str, Any]]:
+        # Use calculate_hedge_orders logic here
+        return self.calculate_hedge_orders(fill_event, yes_orderbook, no_orderbook)
+
+    @property
+    def name(self) -> str:
+        return "PolymarketLiquidityStrategy"
+
+
+class SimpleMarketMakingStrategy(BaseStrategy):
+    """
+    Simple always-on market making strategy for demonstration/template purposes.
+    Places orders at a fixed spread from the midpoint, no hedging or advanced logic.
+    """
+    def __init__(self, spread: float = 0.02, order_size: float = 100):
+        self._spread = spread
+        self._order_size = order_size
+        self.logger = logging.getLogger("SimpleMarketMakingStrategy")
+
+    def analyze_market_condition(
+        self, yes_orderbook: OrderbookSnapshot, no_orderbook: OrderbookSnapshot, **kwargs: Any
+    ) -> str:
+        return "always_on"
+
+    def calculate_orders(
+        self,
+        yes_orderbook: OrderbookSnapshot,
+        no_orderbook: OrderbookSnapshot,
+        current_positions: Dict[str, Position],
+        available_capital: float,
+        **kwargs: Any
+    ) -> List[Dict[str, Any]]:
+        orders = []
+        midpoint = yes_orderbook.midpoint
+        # Place a buy below and a sell above midpoint for YES market
+        orders.append({
+            "side": BookSide.BUY,
+            "price": max(midpoint - self._spread, 0.01),
+            "size": self._order_size,
+            "market_type": "YES",
+            "asset_id": yes_orderbook.asset_id,
+        })
+        orders.append({
+            "side": BookSide.SELL,
+            "price": min(midpoint + self._spread, 0.99),
+            "size": self._order_size,
+            "market_type": "YES",
+            "asset_id": yes_orderbook.asset_id,
+        })
+        # Repeat for NO market
+        midpoint_no = no_orderbook.midpoint
+        orders.append({
+            "side": BookSide.BUY,
+            "price": max(midpoint_no - self._spread, 0.01),
+            "size": self._order_size,
+            "market_type": "NO",
+            "asset_id": no_orderbook.asset_id,
+        })
+        orders.append({
+            "side": BookSide.SELL,
+            "price": min(midpoint_no + self._spread, 0.99),
+            "size": self._order_size,
+            "market_type": "NO",
+            "asset_id": no_orderbook.asset_id,
+        })
+        return orders
+
+    def on_fill(
+        self,
+        fill_event: OrderDetails,
+        yes_orderbook: OrderbookSnapshot,
+        no_orderbook: OrderbookSnapshot,
+        **kwargs: Any
+    ) -> List[Dict[str, Any]]:
+        # No hedging or follow-up for this simple strategy
+        return []
+
+    @property
+    def name(self) -> str:
+        return "SimpleMarketMakingStrategy"

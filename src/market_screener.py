@@ -2,9 +2,8 @@ from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple, Any
 import logging
 
-from src.models import Market, Token
+from src.models import Market, OrderbookSnapshot, OrderbookLevel, Token
 from src.client import Client
-from src.strategy import OrderbookSnapshot, OrderbookLevel
 
 
 @dataclass

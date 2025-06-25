@@ -1,5 +1,7 @@
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Annotated, Optional
+from typing import Annotated, Optional, Tuple
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -131,3 +133,148 @@ class Position(BaseModel):
     market_id: str
     size: int
     entry_price: float
+
+
+class MarketCondition(Enum):
+    """Market conditions for strategy decision making"""
+
+    ATTRACTIVE = "attractive"  # Low competition, good for LP
+    COMPETITIVE = "competitive"  # High competition, low reward share
+    VOLATILE = "volatile"  # High volatility, risk of fills
+    UNAVAILABLE = "unavailable"  # Outside parameters or errors
+
+
+@dataclass
+class OrderbookLevel:
+    """Represents a single level in the orderbook"""
+
+    price: float
+    size: float
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass
+class OrderbookSnapshot:
+    """Complete orderbook snapshot for a market"""
+
+    asset_id: str
+    bids: list[OrderbookLevel]
+    asks: list[OrderbookLevel]
+    midpoint: float
+    spread: float
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    def best_bid(self) -> Optional[float]:
+        return self.bids[0].price if self.bids else None
+
+    def best_ask(self) -> Optional[float]:
+        return self.asks[0].price if self.asks else None
+
+    def total_bid_volume_in_range(self, price_range: Tuple[float, float]) -> float:
+        """Calculate total bid volume within price range"""
+        min_price, max_price = price_range
+        return sum(
+            level.size for level in self.bids if min_price <= level.price <= max_price
+        )
+
+    def total_ask_volume_in_range(self, price_range: tuple[float, float]) -> float:
+        """Calculate total ask volume within price range"""
+        min_price, max_price = price_range
+        return sum(
+            level.size for level in self.asks if min_price <= level.price <= max_price
+        )
+
+
+@dataclass
+class VolatilityMetrics:
+    """Tracks market volatility indicators"""
+
+    midpoint_changes: list[float] = field(default_factory=list)
+    spread_changes: list[float] = field(default_factory=list)
+    volume_spikes: list[float] = field(default_factory=list)
+    last_update: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    window: int = 50
+    snapshots: list["OrderbookSnapshot"] = field(
+        default_factory=list
+    )  # Store recent snapshots
+
+    def add_snapshot(self, snapshot: OrderbookSnapshot):
+        """Add a new orderbook snapshot and update volatility metrics"""
+        if self.snapshots:
+            prev = self.snapshots[-1]
+            # Calculate midpoint change
+            midpoint_change = snapshot.midpoint - prev.midpoint
+            self.add_midpoint_change(midpoint_change)
+            # Calculate spread change
+            spread_change = snapshot.spread - prev.spread
+            self.add_spread_change(spread_change)
+            # Optionally, detect volume spikes (example: total volume difference)
+            prev_bid_vol = sum(b.size for b in prev.bids)
+            prev_ask_vol = sum(a.size for a in prev.asks)
+            curr_bid_vol = sum(b.size for b in snapshot.bids)
+            curr_ask_vol = sum(a.size for a in snapshot.asks)
+            volume_spike = abs(
+                (curr_bid_vol + curr_ask_vol) - (prev_bid_vol + prev_ask_vol)
+            )
+            self.add_volume_spike(volume_spike)
+        self.snapshots.append(snapshot)
+        if len(self.snapshots) > self.window:
+            self.snapshots.pop(0)
+        self.last_update = datetime.now(timezone.utc)
+
+    def add_midpoint_change(self, change: float):
+        """Add midpoint change and maintain time window"""
+        self._add_to_window(self.midpoint_changes, change)
+
+    def add_spread_change(self, change: float):
+        """Add spread change and maintain time window"""
+        self._add_to_window(self.spread_changes, change)
+
+    def add_volume_spike(self, volume: float):
+        """Add volume spike and maintain time window"""
+        self._add_to_window(self.volume_spikes, volume)
+
+    def _add_to_window(self, data_list: list[float], value: float):
+        """Add value and maintain time window (simplified - in reality would track timestamps)"""
+        data_list.append(value)
+        if len(data_list) > 50:  # Keep last 50 data points as proxy for time window
+            data_list.pop(0)
+        self.last_update = datetime.now(timezone.utc)
+
+    def is_volatile(
+        self,
+        midpoint_threshold: float = 0.02,
+        spread_threshold: float = 0.05,
+    ) -> bool:
+        """Determine if market is currently volatile"""
+        if not self.midpoint_changes and not self.spread_changes:
+            return False
+
+        # Check for recent significant midpoint moves
+        if self.midpoint_changes:
+            recent_midpoint_data = (
+                self.midpoint_changes[-10:]
+                if len(self.midpoint_changes) >= 10
+                else self.midpoint_changes
+            )
+            recent_midpoint_volatility = max(
+                abs(change) for change in recent_midpoint_data
+            )
+        else:
+            recent_midpoint_volatility = 0
+
+        # Check for recent spread expansion
+        if self.spread_changes:
+            recent_spread_data = (
+                self.spread_changes[-10:]
+                if len(self.spread_changes) >= 10
+                else self.spread_changes
+            )
+            recent_spread_volatility = max(abs(change) for change in recent_spread_data)
+        else:
+            recent_spread_volatility = 0
+
+        return (
+            recent_midpoint_volatility > midpoint_threshold
+            or recent_spread_volatility > spread_threshold
+        )
