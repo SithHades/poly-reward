@@ -11,7 +11,7 @@ ET_TZ = tz.gettz("America/New_York")
 def map_market(raw: dict) -> Market:
     try:
         # Map tokens
-        tokens = [TokenInfo(**token) for token in raw.get("tokens", [])]
+        tokens = [TokenInfo(token_id=token["token_id"], outcome=token["outcome"], price=token["price"]) for token in raw.get("tokens", [])]
         # Map rewards (if present)
         rewards_data = raw.get("rewards")
         rewards = None
@@ -54,7 +54,14 @@ def map_market(raw: dict) -> Market:
 def map_simplified_market(raw: dict) -> SimplifiedMarket:
     try:
         # Map tokens
-        tokens = [TokenInfo(**token) for token in raw.get("tokens", [])]
+        tokens = []
+        for token in raw.get("tokens", []):
+            if not all(hasattr(token, field) for field in ["token_id", "outcome", "price"]):
+                raise ValueError(f"Missing required field in token: {token}")
+            if not all(token.get(field) is not None for field in ["token_id", "outcome", "price"]):
+                raise ValueError(f"Missing required field in token: {token}")
+            tokens.append(TokenInfo(token_id=token["token_id"], outcome=token["outcome"], price=token["price"]))
+
         # Map rewards (if present)
         rewards_data = raw.get("rewards")
         rewards = None

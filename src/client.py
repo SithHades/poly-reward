@@ -65,10 +65,10 @@ class Client:
         self.logger = logging.getLogger("Client")
         client = ClobClient(
             host,
-            key=key or os.getenv("PK"),
+            key=(key or os.getenv("PK")) or "",
             chain_id=POLYGON,
             signature_type=1,
-            funder=address or os.getenv("BROWSER_ADDRESS"),
+            funder=(address or os.getenv("BROWSER_ADDRESS")) or "",
         )
 
         rate_limits = {
@@ -236,11 +236,11 @@ class Client:
         """
         self.logger.info(f"Creating order with args: {order_args}")
         try:
-            order_args = OrderArgs(
+            order_args = OrderArgsModel(
                 token_id=order_args.token_id,
                 price=float(order_args.price),
                 size=float(order_args.size),
-                side=BUY if order_args.side == BookSide.BUY else SELL,
+                side=BookSide.BUY if order_args.side == BookSide.BUY else BookSide.SELL,
             )
             order = self.client.create_order(order_args)
             return order
@@ -249,7 +249,7 @@ class Client:
             raise
 
     def place_order(
-        self, order: SignedOrder, order_type: Optional[OrderType] = "GTC"
+        self, order: SignedOrder, order_type: Optional[OrderType] = None
     ) -> str:
         """
         Place an order on the CLOB.
@@ -361,7 +361,20 @@ class Client:
         self.logger.info("Getting all open orders")
         try:
             raw_orders = self.client.get_orders(params)
-            return [OrderDetails(**order) for order in raw_orders]
+            return [OrderDetails(
+                order_id=order.get('order_id', ''),
+                status=order.get('status', ''),
+                owner=order.get('owner', ''),
+                maker_address=order.get('maker_address', ''),
+                market_id=order.get('market_id', ''),
+                asset_id=order.get('asset_id', ''),
+                side=order.get('side', ''),
+                original_size=order.get('original_size', 0),
+                matched_size=order.get('matched_size', 0),
+                price=order.get('price', 0.0),
+                order_type=order.get('order_type', ''),
+                created_at=order.get('created_at', 0),
+            ) for order in raw_orders]
         except Exception as e:
             self.logger.error(f"Error getting open orders: {e}")
             return []
@@ -397,7 +410,7 @@ class Client:
             self.logger.error(f"Error getting order books for tokens {tokens}: {e}")
             return {}
 
-    def get_trades(self, params: TradeParams = None):
+    def get_trades(self, params: Optional[TradeParams] = None):
         # TODO Implement if really needed
         return self.client.get_trades(params)
 

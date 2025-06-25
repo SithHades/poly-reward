@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 import logging
 
 from src.models import Market, Token
@@ -22,7 +22,7 @@ class MarketOpportunity:
     recommended_position_size: float
     risk_level: str  # "low", "medium", "high"
 
-    def to_dict(self) -> Dict[str, any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "question_id": self.market.question_id,
             "question": self.market.question,

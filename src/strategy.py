@@ -325,13 +325,13 @@ class PolymarketLiquidityStrategy:
         now = datetime.now(timezone.utc)
 
         for order in current_orders:
-            order_age = now - order.timestamp
+            order_age = now - order.created_at
 
             # Cancel old orders (FIFO management)
             if order_age > timedelta(minutes=self.config.max_order_age_minutes):
-                orders_to_cancel.append(order.id)
+                orders_to_cancel.append(order.order_id)
                 self.logger.info(
-                    f"Cancelling old order {order.id}: {order_age.total_seconds() / 60:.1f} minutes old"
+                    f"Cancelling old order {order.order_id}: {order_age.total_seconds() / 60:.1f} minutes old"
                 )
                 continue
 
@@ -340,8 +340,8 @@ class PolymarketLiquidityStrategy:
                 asset_id in self.volatility_tracker
                 and self.volatility_tracker[asset_id].is_volatile()
             ):
-                orders_to_cancel.append(order.id)
-                self.logger.info(f"Cancelling order {order.id} due to volatility")
+                orders_to_cancel.append(order.order_id)
+                self.logger.info(f"Cancelling order {order.order_id} due to volatility")
                 continue
 
         return orders_to_cancel
@@ -480,21 +480,29 @@ class PolymarketLiquidityStrategy:
         if not self.config.enable_yes_no_hedging:
             return hedge_orders
 
+        yes_asset_id = yes_orderbook.asset_id
+        no_asset_id = no_orderbook.asset_id
+
         try:
             filled_price = filled_order.price
-            filled_size = filled_order.filled_size
+            filled_size = filled_order.matched_size
 
             # Calculate hedge price using YES/NO relationship: p_yes + p_no = 1
-            if "YES" in filled_order.metadata.get("market_type", ""):
+            if filled_order.asset_id == yes_asset_id:
                 # Original order was YES, hedge with NO
                 hedge_price = 1.0 - filled_price
                 hedge_market_type = "NO"
                 target_orderbook = no_orderbook
-            else:
+            elif filled_order.asset_id == no_asset_id:
                 # Original order was NO, hedge with YES
                 hedge_price = 1.0 - filled_price
                 hedge_market_type = "YES"
                 target_orderbook = yes_orderbook
+            else:
+                self.logger.error(
+                    f"Filled order {filled_order.order_id} has invalid asset_id: {filled_order.asset_id}"
+                )
+                return hedge_orders
 
             # Determine hedge side (opposite of original)
             hedge_side = (
@@ -511,7 +519,7 @@ class PolymarketLiquidityStrategy:
                     "size": hedge_size,
                     "market_type": hedge_market_type,
                     "asset_id": target_orderbook.asset_id,
-                    "reason": f"hedge_for_{filled_order.id}",
+                    "reason": f"hedge_for_{filled_order.order_id}",
                 }
             )
 

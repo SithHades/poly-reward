@@ -1,17 +1,17 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any, Tuple, Literal
 from datetime import datetime, timezone, timedelta
 import logging
 import asyncio
 from enum import Enum
 
-from src.models import Order, Position, OrderSide, OrderStatus, OrderArgsModel, BookSide
+from src.models import OrderDetails, OrderStatus, OrderArgsModel, BookSide
 
 from src.client import Client
 from src.strategy import (
     PolymarketLiquidityStrategy,
 )
-from py_clob_client.clob_types import OrderType, OpenOrderParams
+from py_clob_client.clob_types import OpenOrderParams, OrderType
 
 
 class OrderLifecycleEvent(Enum):
@@ -48,7 +48,7 @@ class OrderMetrics:
 class ManagedOrder:
     """Extended order with management metadata"""
 
-    order: Order
+    order: OrderDetails
     placement_time: datetime
     last_status_check: datetime
     retry_count: int = 0
@@ -60,6 +60,13 @@ class ManagedOrder:
     def add_lifecycle_event(self, event: OrderLifecycleEvent, details: str = ""):
         """Add lifecycle event with timestamp"""
         self.lifecycle_events.append((datetime.now(timezone.utc), event, details))
+
+
+@dataclass
+class Position:
+    market_id: str
+    size: int
+    entry_price: float
 
 
 class OrderManager:
@@ -132,9 +139,9 @@ class OrderManager:
         self,
         price: float,
         size: float,
-        side: OrderSide,
+        side: BookSide,
         token_id: str,
-        order_type: OrderType = OrderType.GTC,
+        order_type: Literal["GTC", "FOK", "GTD", "FAK"] = "GTC",
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Optional[str]:
         """
@@ -179,14 +186,21 @@ class OrderManager:
                 self.logger.error(f"Order placement failed: {order_id}")
                 return None
 
-            order = Order(
-                id=order_id,
+            order = OrderDetails(
+                order_id=order_id,
                 market_id=token_id,
                 side=side,
                 price=price,
-                size=size,
+                original_size=int(size),
+                matched_size=0,
                 status=OrderStatus.PENDING,
-                metadata=metadata or {},
+                created_at=int(datetime.now(timezone.utc).timestamp()),
+                expiration=0,
+                order_type=str(order_type),
+                associate_trades=[],
+                owner="",
+                maker_address="",
+                asset_id="",
             )
 
             managed_order = ManagedOrder(
@@ -296,7 +310,7 @@ class OrderManager:
                 # Order not found in open orders; treat as filled/cancelled/expired
                 # For now, mark as filled (could be improved with more info)
                 current_status = OrderStatus.FILLED
-                filled_size = managed_order.order.size
+                filled_size = getattr(managed_order.order, 'filled_size', 0)
             else:
                 # Map status from OrderDetails
                 current_status = order_details.status
@@ -305,7 +319,7 @@ class OrderManager:
             old_status = managed_order.order.status
             if (
                 current_status != old_status
-                or filled_size != managed_order.order.filled_size
+                or filled_size != getattr(managed_order.order, 'filled_size', 0)
             ):
                 managed_order.order.status = current_status
                 managed_order.order.filled_size = filled_size
@@ -492,7 +506,7 @@ class OrderManager:
         if self.enable_auto_hedging and not managed_order.hedge_pending:
             await self._generate_hedge_orders(managed_order)
 
-    def _update_position(self, order: Order):
+    def _update_position(self, order: OrderDetails):
         """Update position tracking based on filled order"""
         market_id = order.market_id
 
@@ -502,9 +516,9 @@ class OrderManager:
             )
 
         position = self.positions[market_id]
-        filled_size = order.filled_size
+        filled_size = getattr(order, 'filled_size', 0)
 
-        if order.side == OrderSide.BUY:
+        if order.side == BookSide.BUY:
             position.size += filled_size
         else:
             position.size -= filled_size
@@ -524,7 +538,7 @@ class OrderManager:
             # This would need actual orderbook data
             # For now, just log the hedge intent
             self.logger.info(
-                f"Hedge order generation needed for {managed_order.order.id}"
+                f"Hedge order generation needed for {getattr(managed_order.order, 'order_id', 'unknown')}"
             )
 
             # In full implementation:
@@ -538,7 +552,7 @@ class OrderManager:
             managed_order.hedge_pending = False
 
     def _validate_order(
-        self, price: float, size: float, side: OrderSide, token_id: str
+        self, price: float, size: float, side: BookSide, token_id: str
     ) -> bool:
         """Validate order parameters"""
         if price <= 0:

@@ -1,5 +1,6 @@
 from enum import Enum
 from typing import Annotated, Optional
+from dataclasses import dataclass
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -125,3 +126,9 @@ class SimplifiedMarket(BaseModel):
     closed: bool
     archived: bool
     accepting_orders: bool
+
+
+class Position(BaseModel):
+    market_id: str
+    size: int
+    entry_price: float
