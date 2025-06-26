@@ -8,6 +8,7 @@ dependencies = [
     "aiohttp>=3.12.13",
     "ccxt>=4.4.91",
     "dependency-injector>=4.47.1",
+    "eth-account>=0.13.7",
     "pandas>=2.3.0",
     "plotly>=6.1.2",
     "py-clob-client>=0.23.0",

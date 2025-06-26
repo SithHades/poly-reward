@@ -4,6 +4,12 @@ from typing import Optional, List, Dict, Any
 import requests
 from datetime import datetime, timezone
 
+try:
+    from eth_account import Account
+    from eth_account.messages import encode_defunct
+except ImportError:
+    raise ImportError("eth_account is required for signing. Install with 'uv pip install eth-account'.")
+
 from src.models import (
     BookSide,
     Market,
@@ -17,12 +23,96 @@ from src.models import (
 )
 
 LIMITLESS_API_URL = os.getenv("LIMITLESS_API_URL", "https://api.limitless.exchange")
+LIMITLESS_WALLET = os.getenv("LIMITLESS_WALLET")
+LIMITLESS_PK = os.getenv("LIMITLESS_PK")
 
 class LimitlessClient:
     def __init__(self, api_url: Optional[str] = None, session: Optional[requests.Session] = None):
         self.api_url = api_url or LIMITLESS_API_URL
         self.session = session or requests.Session()
         self.logger = logging.getLogger("LimitlessClient")
+        self.wallet = LIMITLESS_WALLET
+        self.private_key = LIMITLESS_PK
+        if not self.wallet or not self.private_key:
+            self.logger.warning("LIMITLESS_WALLET and LIMITLESS_PK must be set for authentication.")
+
+    def login(self, client: str = "eoa", smart_wallet: Optional[str] = None, referral: Optional[str] = None) -> bool:
+        """
+        Authenticate with the Limitless API using wallet signature.
+        - Fetches a signing message from /auth/signing-message
+        - Signs it with the private key
+        - Posts to /auth/login with required headers and body
+        - Stores session cookie for future requests
+        Returns True if login is successful, False otherwise.
+        """
+        if not self.wallet or not self.private_key:
+            raise ValueError("LIMITLESS_WALLET and LIMITLESS_PK must be set in environment.")
+        # 1. Get signing message
+        url = f"{self.api_url}/auth/signing-message"
+        self.logger.info(f"Fetching signing message from {url}")
+        resp = self.session.get(url)
+        resp.raise_for_status()
+        signing_message = resp.json()
+        if not isinstance(signing_message, str):
+            raise ValueError("Signing message response is not a string.")
+        # 2. Sign the message
+        acct = Account.from_key(self.private_key)
+        message = encode_defunct(text=signing_message)
+        signature = Account.sign_message(message, private_key=self.private_key).signature.hex()
+        # 3. Prepare headers and body
+        headers = {
+            "x-account": self.wallet,
+            "x-signing-message": signing_message,
+            "x-signature": signature,
+        }
+        body = {
+            "client": client,
+        }
+        if smart_wallet:
+            body["smartWallet"] = smart_wallet
+        if referral:
+            body["r"] = referral
+        # 4. Post to /auth/login
+        login_url = f"{self.api_url}/auth/login"
+        self.logger.info(f"Logging in at {login_url}")
+        resp = self.session.post(login_url, headers=headers, json=body)
+        if resp.status_code == 200:
+            self.logger.info("Login successful. Session cookie stored.")
+            return True
+        else:
+            self.logger.error(f"Login failed: {resp.status_code} {resp.text}")
+            return False
+
+    def verify_auth(self) -> bool:
+        """
+        Verify if the current session is authenticated (session cookie is valid).
+        Returns True if authenticated, False otherwise.
+        """
+        url = f"{self.api_url}/auth/verify-auth"
+        self.logger.info(f"Verifying authentication at {url}")
+        resp = self.session.get(url)
+        if resp.status_code == 200:
+            self.logger.info("Session is authenticated.")
+            return True
+        else:
+            self.logger.warning(f"Session not authenticated: {resp.status_code}")
+            return False
+
+    def logout(self) -> bool:
+        """
+        Logout and clear the session cookie.
+        Returns True if logout is successful.
+        """
+        url = f"{self.api_url}/auth/logout"
+        self.logger.info(f"Logging out at {url}")
+        resp = self.session.post(url)
+        if resp.status_code == 200:
+            self.logger.info("Logout successful.")
+            self.session.cookies.clear()
+            return True
+        else:
+            self.logger.warning(f"Logout failed: {resp.status_code}")
+            return False
 
     def get_markets(self) -> List[Market]:
         """Fetch all active markets from Limitless Exchange."""
