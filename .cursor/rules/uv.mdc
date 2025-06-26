@@ -1,0 +1,74 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+- **UV is the ONLY supported package manager for Python in this project**
+  - All Python dependencies must be installed and managed using [uv](mdc:https:/github.com/astral-sh/uv)
+  - Do NOT use pip, pipenv, poetry, or requirements.txt for dependency management
+  - Do NOT edit pyproject.toml in a Poetry- or pipenv-specific way
+  - All dependencies must be tracked in `pyproject.toml` and locked in `uv.lock`
+
+- **Installation and Management Commands:**
+  - **Install all dependencies:**
+    ```sh
+    uv pip install -r requirements.txt  # (if requirements.txt is present for migration only)
+    uv pip install .  # (for editable installs)
+    uv venv .venv  # (create a virtual environment)
+    uv pip install <package>  # (add a package)
+    uv pip uninstall <package>  # (remove a package)
+    uv pip list  # (list installed packages)
+    uv pip freeze  # (show current environment)
+    uv sync  # (sync environment to uv.lock)
+    uv run      Run a command or script
+    uv init     Create a new project
+    uv add      Add dependencies to the project
+    uv remove   Remove dependencies from the project
+    uv sync     Update the project's environment
+    uv lock     Update the project's lockfile
+    uv export   Export the project's lockfile to an alternate format
+    uv tree     Display the project's dependency tree
+    uv tool     Run and install commands provided by Python packages
+    uv python   Manage Python versions and installations
+    uv pip      Manage Python packages with a pip-compatible interface
+    uv venv     Create a virtual environment
+    uv build    Build Python packages into source distributions and wheels
+    uv publish  Upload distributions to an index
+    uv cache    Manage uv's cache
+    uv self     Manage the uv executable
+    uv version  Display uv's version
+    uv help     Display documentation for a command
+    ```
+  - **Add a new package:**
+    ```sh
+    uv add <package>
+    uv sync
+    ```
+  - **Remove a package:**
+    ```sh
+    uv remove <package>
+    uv sync
+    ```
+
+- **Best Practices:**
+  - Always run `uv sync` after modifying dependencies to ensure `uv.lock` is up to date
+  - Commit both `pyproject.toml` and `uv.lock` after any dependency changes
+  - Never use `pip install` or `poetry add` directly
+  - If a requirements.txt is present, it is for migration only and should not be used for ongoing management
+
+- **Examples:**
+  - **Add eth-account:**
+    ```sh
+    uv add eth-account
+    uv sync
+    ```
+  - **Remove web3:**
+    ```sh
+    uv remove web3
+    uv sync
+    ```
+
+- **References:**
+  - [uv documentation](mdc:https:/github.com/astral-sh/uv)
+
+// This rule supersedes any pip, poetry, or requirements.txt-based instructions.
