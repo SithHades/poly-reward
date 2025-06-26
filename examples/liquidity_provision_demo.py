@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 # Add parent directory to path so we can import from src
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src.client import Client
+from src.polymarket_client import PolymarketClient
 from src.market_screener import PolymarketScreener, ScreeningCriteria, MarketOpportunity
 from src.strategy import PolymarketLiquidityStrategy, LiquidityProvisionConfig
 from src.models import Position
@@ -42,7 +42,7 @@ def demo_market_screening():
     print("=" * 60)
 
     # Initialize client in paper trading mode
-    client = Client()
+    client = PolymarketClient()
 
     # Set up screening criteria
     criteria = ScreeningCriteria(
@@ -124,7 +124,7 @@ def demo_strategy_analysis(opportunities: List[MarketOpportunity]):
     print(f"Market: {top_opportunity.market.question[:80]}...")
 
     # Initialize client for orderbook data
-    client = Client()
+    client = PolymarketClient()
     screener = PolymarketScreener(client)
 
     # Get orderbooks

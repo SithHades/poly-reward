@@ -1,6 +1,6 @@
 from unittest.mock import Mock, patch
 from src.market_screener import PolymarketScreener, ScreeningCriteria, MarketOpportunity
-from src.client import Client
+from src.polymarket_client import PolymarketClient
 from src.strategy import OrderbookSnapshot, OrderbookLevel
 
 
@@ -31,7 +31,7 @@ class TestScreeningCriteria:
 
 class TestPolymarketScreener:
     def setup_method(self):
-        self.mock_client = Mock(spec=Client)
+        self.mock_client = Mock(spec=PolymarketClient)
         self.criteria = ScreeningCriteria(
             min_daily_rewards=20, max_competition_density=0.8
         )
@@ -365,7 +365,7 @@ class TestMarketOpportunity:
 
 class TestIntegrationScenarios:
     def setup_method(self):
-        self.mock_client = Mock(spec=Client)
+        self.mock_client = Mock(spec=PolymarketClient)
         self.screener = PolymarketScreener(self.mock_client)
 
     def test_end_to_end_screening_workflow(self):

@@ -3,7 +3,7 @@ from typing import List, Dict, Optional, Tuple, Any
 import logging
 
 from src.models import Market, OrderbookSnapshot, OrderbookLevel, Token
-from src.client import Client
+from src.polymarket_client import PolymarketClient
 
 
 @dataclass
@@ -62,7 +62,7 @@ class PolymarketScreener:
     - Risk assessment
     """
 
-    def __init__(self, client: Client, criteria: Optional[ScreeningCriteria] = None):
+    def __init__(self, client: PolymarketClient, criteria: Optional[ScreeningCriteria] = None):
         self.client = client
         self.criteria = criteria or ScreeningCriteria()
         self.logger = logging.getLogger("PolymarketScreener")

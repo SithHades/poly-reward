@@ -9,7 +9,7 @@ from src.order_manager import (
     OrderLifecycleEvent,
 )
 from src.models import Order, Position, OrderSide, OrderStatus
-from src.client import Client
+from src.polymarket_client import PolymarketClient
 from src.strategy import (
     PolymarketLiquidityStrategy,
     OrderbookSnapshot,
@@ -21,7 +21,7 @@ from py_clob_client.clob_types import OrderType
 class TestOrderManager:
     def setup_method(self):
         """Setup test fixtures"""
-        self.mock_client = Mock(spec=Client)
+        self.mock_client = Mock(spec=PolymarketClient)
         self.mock_strategy = Mock(spec=PolymarketLiquidityStrategy)
 
         # Setup mock client responses

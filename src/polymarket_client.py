@@ -53,7 +53,7 @@ def rate_limited(calls, period):
     return decorator
 
 
-class Client:
+class PolymarketClient:
     def __init__(
         self,
         host: str = "https://clob.polymarket.com",
@@ -734,4 +734,4 @@ class Client:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    client = Client()
+    client = PolymarketClient()
