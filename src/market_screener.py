@@ -2,8 +2,9 @@ from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple, Any
 import logging
 
-from src.models import Market, OrderbookSnapshot, OrderbookLevel, Token
+from src.models import Market, OrderbookSnapshot, OrderbookLevel, Token, MarketCondition
 from src.polymarket_client import PolymarketClient
+from src.strategy_base import BaseStrategy
 
 
 @dataclass
@@ -62,59 +63,81 @@ class PolymarketScreener:
     - Risk assessment
     """
 
-    def __init__(self, client: PolymarketClient, criteria: Optional[ScreeningCriteria] = None):
+    def __init__(
+        self,
+        client: PolymarketClient,
+        strategy: BaseStrategy,
+        criteria: Optional[ScreeningCriteria] = None,
+    ):
         self.client = client
         self.criteria = criteria or ScreeningCriteria()
         self.logger = logging.getLogger("PolymarketScreener")
 
-    def find_opportunities(self, max_markets: int = 100) -> List[MarketOpportunity]:
+    async def find_opportunities(self, max_markets: int = 100) -> List[Market]:
         """
-        Find the best liquidity provision opportunities across all markets.
-
-        Args:
-            max_markets: Maximum number of markets to evaluate
-
-        Returns:
-            List of MarketOpportunity objects sorted by reward score
+        Fetches all active markets and filters them based on strategy-defined criteria.
         """
-        self.logger.info(f"Screening up to {max_markets} markets for LP opportunities")
+        self.logger.info("Starting market screening for attractive LP opportunities...")
+        all_markets = self.client.get_active_markets()
+        self.logger.info(f"Found {len(all_markets)} active markets.")
 
-        opportunities = []
-        markets_evaluated = 0
+        attractive_markets = []
+        for market in all_markets:
+            if not self._is_market_eligible(market):
+                continue
 
-        # Get sampling markets directly from client (client handles pagination)
-        markets = self.client.get_sampling_markets()
+            # For 50/50 markets, we need both YES and NO orderbooks
+            if market.is_50_50_outcome:
+                yes_token = next((t for t in market.tokens if t.outcome == "Yes"), None)
+                no_token = next((t for t in market.tokens if t.outcome == "No"), None)
 
-        for market in markets[:max_markets]:
-            try:
-                # Quick filtering based on basic criteria
-                if not self._passes_basic_criteria(market):
+                if not yes_token or not no_token:
+                    self.logger.warning(
+                        f"Skipping 50/50 market {market.market_slug} due to missing YES/NO tokens."
+                    )
                     continue
 
-                # Detailed analysis for promising markets
-                opportunity = self._analyze_market_opportunity(market)
+                try:
+                    yes_orderbook = self.client.get_order_book(yes_token.token_id)
+                    no_orderbook = self.client.get_order_book(no_token.token_id)
 
-                if opportunity and self._meets_screening_criteria(opportunity):
-                    opportunities.append(opportunity)
-                    self.logger.info(
-                        f"Found opportunity: {market.question[:50]}... Score: {opportunity.reward_score}"
+                    # Convert to OrderbookSnapshot for strategy analysis
+                    yes_snapshot = self._convert_to_orderbook_snapshot(
+                        yes_token.token_id, yes_orderbook, yes_token.price
+                    )
+                    no_snapshot = self._convert_to_orderbook_snapshot(
+                        no_token.token_id, no_orderbook, no_token.price
                     )
 
-                markets_evaluated += 1
+                    market_condition = await self.strategy.analyze_market_condition(
+                        yes_snapshot, no_snapshot, market=market
+                    )
 
-            except Exception as e:
-                self.logger.error(
-                    f"Error analyzing market {getattr(market, 'question_id', 'unknown')}: {e}"
+                    if market_condition == MarketCondition.ATTRACTIVE:
+                        attractive_markets.append(market)
+                        self.logger.info(
+                            f"Market {market.market_slug} identified as ATTRACTIVE."
+                        )
+                    else:
+                        self.logger.info(
+                            f"Market {market.market_slug} is {market_condition.value}."
+                        )
+
+                except Exception as e:
+                    self.logger.error(
+                        f"Error processing market {market.market_slug}: {e}"
+                    )
+            else:
+                # For non-50/50 markets, we might need a different approach or skip
+                self.logger.info(
+                    f"Skipping non-50/50 market {market.market_slug} for now."
                 )
                 continue
 
-        # Sort by reward score (descending)
-        opportunities.sort(key=lambda x: x.reward_score, reverse=True)
-
         self.logger.info(
-            f"Found {len(opportunities)} qualifying opportunities from {markets_evaluated} markets"
+            f"Finished screening. Found {len(attractive_markets)} attractive markets."
         )
-        return opportunities
+        return attractive_markets
 
     def analyze_specific_market(self, question_id: str) -> Optional[MarketOpportunity]:
         """
@@ -177,18 +200,18 @@ class PolymarketScreener:
                 return None, None
 
             # Get orderbooks
-            yes_orderbook_data = self.client.get_order_book(yes_token.token_id)
-            no_orderbook_data = self.client.get_order_book(no_token.token_id)
+            yes_raw_orderbook = self.client.get_order_book(yes_token.token_id)
+            no_raw_orderbook = self.client.get_order_book(no_token.token_id)
 
             # Convert to OrderbookSnapshot objects
-            yes_orderbook = self._convert_to_orderbook_snapshot(
-                yes_token.token_id, yes_orderbook_data, yes_token.price
+            yes_snapshot = self._convert_to_orderbook_snapshot(
+                yes_token.token_id, yes_raw_orderbook, yes_token.price
             )
-            no_orderbook = self._convert_to_orderbook_snapshot(
-                no_token.token_id, no_orderbook_data, no_token.price
+            no_snapshot = self._convert_to_orderbook_snapshot(
+                no_token.token_id, no_raw_orderbook, no_token.price
             )
 
-            return yes_orderbook, no_orderbook
+            return yes_snapshot, no_snapshot
 
         except Exception as e:
             self.logger.error(

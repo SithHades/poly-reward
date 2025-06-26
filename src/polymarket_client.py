@@ -3,6 +3,7 @@ import logging
 import os
 from typing import Optional
 
+import dotenv
 from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import (
     BookParams,
@@ -39,6 +40,9 @@ from src.models import (
     Spread,
     Token,
 )
+
+
+dotenv.load_dotenv()
 
 
 def rate_limited(calls, period):

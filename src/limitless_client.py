@@ -18,7 +18,7 @@ from src.models import (
     OrderbookLevel,
     OrderbookSnapshot,
     TokenInfo,
-    Token,
+    
     Rewards,
 )
 
@@ -56,7 +56,7 @@ class LimitlessClient:
         if not isinstance(signing_message, str):
             raise ValueError("Signing message response is not a string.")
         # 2. Sign the message
-        acct = Account.from_key(self.private_key)
+        
         message = encode_defunct(text=signing_message)
         signature = Account.sign_message(message, private_key=self.private_key).signature.hex()
         # 3. Prepare headers and body
