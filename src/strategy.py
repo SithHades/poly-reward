@@ -2,7 +2,14 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone, timedelta
 import logging
-from src.models import BookSide, MarketCondition, OrderDetails, OrderbookSnapshot, Position, VolatilityMetrics
+from src.models import (
+    BookSide,
+    MarketCondition,
+    OrderDetails,
+    OrderbookSnapshot,
+    Position,
+    VolatilityMetrics,
+)
 from src.strategy_base import BaseStrategy
 
 
@@ -53,7 +60,10 @@ class PolymarketLiquidityStrategy(BaseStrategy):
         self.order_timestamps: Dict[str, datetime] = {}
 
     def analyze_market_condition(
-        self, yes_orderbook: OrderbookSnapshot, no_orderbook: OrderbookSnapshot, **kwargs: Any
+        self,
+        yes_orderbook: OrderbookSnapshot,
+        no_orderbook: OrderbookSnapshot,
+        **kwargs: Any,
     ) -> MarketCondition:
         """
         Analyze market conditions to determine if suitable for liquidity provision
@@ -108,7 +118,7 @@ class PolymarketLiquidityStrategy(BaseStrategy):
         no_orderbook: OrderbookSnapshot,
         current_positions: Dict[str, Position],
         available_capital: float,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> List[Dict[str, Any]]:
         """
         Calculate optimal liquidity provision orders
@@ -394,7 +404,7 @@ class PolymarketLiquidityStrategy(BaseStrategy):
         fill_event: OrderDetails,
         yes_orderbook: OrderbookSnapshot,
         no_orderbook: OrderbookSnapshot,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> List[Dict[str, Any]]:
         # Use calculate_hedge_orders logic here
         return self.calculate_hedge_orders(fill_event, yes_orderbook, no_orderbook)
@@ -409,13 +419,17 @@ class SimpleMarketMakingStrategy(BaseStrategy):
     Simple always-on market making strategy for demonstration/template purposes.
     Places orders at a fixed spread from the midpoint, no hedging or advanced logic.
     """
+
     def __init__(self, spread: float = 0.02, order_size: float = 100):
         self._spread = spread
         self._order_size = order_size
         self.logger = logging.getLogger("SimpleMarketMakingStrategy")
 
     def analyze_market_condition(
-        self, yes_orderbook: OrderbookSnapshot, no_orderbook: OrderbookSnapshot, **kwargs: Any
+        self,
+        yes_orderbook: OrderbookSnapshot,
+        no_orderbook: OrderbookSnapshot,
+        **kwargs: Any,
     ) -> str:
         return "always_on"
 
@@ -425,41 +439,49 @@ class SimpleMarketMakingStrategy(BaseStrategy):
         no_orderbook: OrderbookSnapshot,
         current_positions: Dict[str, Position],
         available_capital: float,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> List[Dict[str, Any]]:
         orders = []
         midpoint = yes_orderbook.midpoint
         # Place a buy below and a sell above midpoint for YES market
-        orders.append({
-            "side": BookSide.BUY,
-            "price": max(midpoint - self._spread, 0.01),
-            "size": self._order_size,
-            "market_type": "YES",
-            "asset_id": yes_orderbook.asset_id,
-        })
-        orders.append({
-            "side": BookSide.SELL,
-            "price": min(midpoint + self._spread, 0.99),
-            "size": self._order_size,
-            "market_type": "YES",
-            "asset_id": yes_orderbook.asset_id,
-        })
+        orders.append(
+            {
+                "side": BookSide.BUY,
+                "price": max(midpoint - self._spread, 0.01),
+                "size": self._order_size,
+                "market_type": "YES",
+                "asset_id": yes_orderbook.asset_id,
+            }
+        )
+        orders.append(
+            {
+                "side": BookSide.SELL,
+                "price": min(midpoint + self._spread, 0.99),
+                "size": self._order_size,
+                "market_type": "YES",
+                "asset_id": yes_orderbook.asset_id,
+            }
+        )
         # Repeat for NO market
         midpoint_no = no_orderbook.midpoint
-        orders.append({
-            "side": BookSide.BUY,
-            "price": max(midpoint_no - self._spread, 0.01),
-            "size": self._order_size,
-            "market_type": "NO",
-            "asset_id": no_orderbook.asset_id,
-        })
-        orders.append({
-            "side": BookSide.SELL,
-            "price": min(midpoint_no + self._spread, 0.99),
-            "size": self._order_size,
-            "market_type": "NO",
-            "asset_id": no_orderbook.asset_id,
-        })
+        orders.append(
+            {
+                "side": BookSide.BUY,
+                "price": max(midpoint_no - self._spread, 0.01),
+                "size": self._order_size,
+                "market_type": "NO",
+                "asset_id": no_orderbook.asset_id,
+            }
+        )
+        orders.append(
+            {
+                "side": BookSide.SELL,
+                "price": min(midpoint_no + self._spread, 0.99),
+                "size": self._order_size,
+                "market_type": "NO",
+                "asset_id": no_orderbook.asset_id,
+            }
+        )
         return orders
 
     def on_fill(
@@ -467,7 +489,7 @@ class SimpleMarketMakingStrategy(BaseStrategy):
         fill_event: OrderDetails,
         yes_orderbook: OrderbookSnapshot,
         no_orderbook: OrderbookSnapshot,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> List[Dict[str, Any]]:
         # No hedging or follow-up for this simple strategy
         return []

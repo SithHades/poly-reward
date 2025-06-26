@@ -1,14 +1,20 @@
 import asyncio
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Button, Static, ListView, ListItem, Label, Input, RichLog
-from textual.containers import Container, Vertical
+from textual.widgets import (
+    Header,
+    Footer,
+    Static,
+    ListView,
+    ListItem,
+    Label,
+    Input,
+    RichLog,
+)
 from textual.screen import Screen
-from textual.reactive import reactive
 import importlib
 import sys
 import os
 import inspect
-from typing import Type, Optional
 
 # Dynamic import helpers
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
@@ -18,7 +24,8 @@ strategy_mod = importlib.import_module("strategy")
 BaseStrategy = getattr(importlib.import_module("strategy_base"), "BaseStrategy")
 
 strategies = [
-    cls for name, cls in inspect.getmembers(strategy_mod, inspect.isclass)
+    cls
+    for name, cls in inspect.getmembers(strategy_mod, inspect.isclass)
     if issubclass(cls, BaseStrategy) and cls is not BaseStrategy
 ]
 
@@ -34,13 +41,17 @@ Client = getattr(client_mod, "Client")
 # Singleton Client instance
 client_instance = Client()
 
+
 class MainMenu(Screen):
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Static("""
+        yield Static(
+            """
 [bold]Poly Reward Terminal UI[/bold]
 Select an option:
-""", id="title")
+""",
+            id="title",
+        )
         yield ListView(
             ListItem(Label("Run a Strategy")),
             ListItem(Label("Run a Market Screener")),
@@ -48,7 +59,7 @@ Select an option:
             ListItem(Label("Client Actions")),
             ListItem(Label("Settings/Config")),
             ListItem(Label("Exit")),
-            id="main-menu-list"
+            id="main-menu-list",
         )
         yield Footer()
 
@@ -75,14 +86,16 @@ class StrategyMenu(Screen):
         yield ListView(
             *[ListItem(Label(cls.__name__)) for cls in strategies],
             ListItem(Label("Back")),
-            id="strategy-list"
+            id="strategy-list",
         )
         yield Footer()
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         idx = event.control.index
         if idx < len(strategies):
-            self.app.push_screen(PlaceholderScreen(f"Selected strategy: {strategies[idx].__name__}"))
+            self.app.push_screen(
+                PlaceholderScreen(f"Selected strategy: {strategies[idx].__name__}")
+            )
         else:
             self.app.pop_screen()
 
@@ -94,14 +107,16 @@ class ScreenerMenu(Screen):
         yield ListView(
             *[ListItem(Label(cls.__name__)) for cls in screeners],
             ListItem(Label("Back")),
-            id="screener-list"
+            id="screener-list",
         )
         yield Footer()
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         idx = event.control.index
         if idx < len(screeners):
-            self.app.push_screen(PlaceholderScreen(f"Selected screener: {screeners[idx].__name__}"))
+            self.app.push_screen(
+                PlaceholderScreen(f"Selected screener: {screeners[idx].__name__}")
+            )
         else:
             self.app.pop_screen()
 
@@ -128,7 +143,7 @@ class ClientActionsMenu(Screen):
             ListItem(Label("List all markets")),
             ListItem(Label("Get market details by market id")),
             ListItem(Label("Back")),
-            id="client-actions-list"
+            id="client-actions-list",
         )
         yield Footer()
 
@@ -190,6 +205,7 @@ class ClientCancelOrderScreen(Screen):
             self.textlog.write("[red]Order ID required.[/red]")
             return
         self.textlog.write(f"Cancelling order {order_id}...")
+
         async def do_cancel():
             try:
                 result = await asyncio.to_thread(client_instance.cancel_order, order_id)
@@ -199,6 +215,7 @@ class ClientCancelOrderScreen(Screen):
                     self.textlog.write(f"[red]Failed to cancel order {order_id}.[/red]")
             except Exception as e:
                 self.textlog.write(f"[red]Error: {e}[/red]")
+
         asyncio.create_task(do_cancel())
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
@@ -211,7 +228,9 @@ class ClientOrderBookScreen(Screen):
         yield Static("[bold]Get Order Book for Token[/bold]", id="title")
         self.input = Input(placeholder="Enter token ID", id="token-id-input")
         yield self.input
-        self.textlog = RichLog(highlight=True, markup=True, wrap=True, id="orderbook-log")
+        self.textlog = RichLog(
+            highlight=True, markup=True, wrap=True, id="orderbook-log"
+        )
         yield self.textlog
         yield ListView(ListItem(Label("Back")), id="back-list")
         yield Footer()
@@ -222,13 +241,17 @@ class ClientOrderBookScreen(Screen):
             self.textlog.write("[red]Token ID required.[/red]")
             return
         self.textlog.write(f"Getting order book for token {token_id}...")
+
         async def do_get():
             try:
                 # Token is just a string here; adapt if Token is a class
-                orderbook = await asyncio.to_thread(client_instance.get_order_book, token_id)
+                orderbook = await asyncio.to_thread(
+                    client_instance.get_order_book, token_id
+                )
                 self.textlog.write(str(orderbook))
             except Exception as e:
                 self.textlog.write(f"[red]Error: {e}[/red]")
+
         asyncio.create_task(do_get())
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
@@ -266,7 +289,9 @@ class ClientMarketDetailsScreen(Screen):
         yield Static("[bold]Get Market Details by ID[/bold]", id="title")
         self.input = Input(placeholder="Enter market ID", id="market-id-input")
         yield self.input
-        self.textlog = RichLog(highlight=True, markup=True, wrap=True, id="marketdetails-log")
+        self.textlog = RichLog(
+            highlight=True, markup=True, wrap=True, id="marketdetails-log"
+        )
         yield self.textlog
         yield ListView(ListItem(Label("Back")), id="back-list")
         yield Footer()
@@ -277,12 +302,14 @@ class ClientMarketDetailsScreen(Screen):
             self.textlog.write("[red]Market ID required.[/red]")
             return
         self.textlog.write(f"Getting market details for {market_id}...")
+
         async def do_get():
             try:
                 market = await asyncio.to_thread(client_instance.get_market, market_id)
                 self.textlog.write(str(market))
             except Exception as e:
                 self.textlog.write(f"[red]Error: {e}[/red]")
+
         asyncio.create_task(do_get())
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
@@ -330,4 +357,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()

@@ -1,10 +1,11 @@
 from src.models import OrderbookSnapshot
 
+
 def find_arbitrage_opportunities(
-    yes_orderbook: OrderbookSnapshot, 
+    yes_orderbook: OrderbookSnapshot,
     no_orderbook: OrderbookSnapshot,
     max_total_cost: float = 1.0,
-    max_levels: int = 5
+    max_levels: int = 5,
 ) -> list[dict[str, float]]:
     """
     Find arbitrage opportunities between two orderbooks (YES/NO or UP/DOWN).
@@ -30,15 +31,17 @@ def find_arbitrage_opportunities(
             if total_cost < max_total_cost:
                 max_size = min(yes_level.size, no_level.size)
                 profit_per_share = max_total_cost - total_cost
-                opportunities.append({
-                    'yes_price': yes_level.price,
-                    'no_price': no_level.price,
-                    'yes_size': yes_level.size,
-                    'no_size': no_level.size,
-                    'total_cost': total_cost,
-                    'max_size': max_size,
-                    'profit_per_share': profit_per_share,
-                })
+                opportunities.append(
+                    {
+                        "yes_price": yes_level.price,
+                        "no_price": no_level.price,
+                        "yes_size": yes_level.size,
+                        "no_size": no_level.size,
+                        "total_cost": total_cost,
+                        "max_size": max_size,
+                        "profit_per_share": profit_per_share,
+                    }
+                )
     # Sort by profit per share, descending
-    opportunities.sort(key=lambda x: x['profit_per_share'], reverse=True)
-    return opportunities 
+    opportunities.sort(key=lambda x: x["profit_per_share"], reverse=True)
+    return opportunities

@@ -62,7 +62,9 @@ class PolymarketScreener:
     - Risk assessment
     """
 
-    def __init__(self, client: PolymarketClient, criteria: Optional[ScreeningCriteria] = None):
+    def __init__(
+        self, client: PolymarketClient, criteria: Optional[ScreeningCriteria] = None
+    ):
         self.client = client
         self.criteria = criteria or ScreeningCriteria()
         self.logger = logging.getLogger("PolymarketScreener")

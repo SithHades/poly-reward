@@ -8,7 +8,9 @@ try:
     from eth_account import Account
     from eth_account.messages import encode_defunct
 except ImportError:
-    raise ImportError("eth_account is required for signing. Install with 'uv pip install eth-account'.")
+    raise ImportError(
+        "eth_account is required for signing. Install with 'uv pip install eth-account'."
+    )
 
 from src.models import (
     BookSide,
@@ -18,7 +20,6 @@ from src.models import (
     OrderbookLevel,
     OrderbookSnapshot,
     TokenInfo,
-    Token,
     Rewards,
 )
 
@@ -26,17 +27,27 @@ LIMITLESS_API_URL = os.getenv("LIMITLESS_API_URL", "https://api.limitless.exchan
 LIMITLESS_WALLET = os.getenv("LIMITLESS_WALLET")
 LIMITLESS_PK = os.getenv("LIMITLESS_PK")
 
+
 class LimitlessClient:
-    def __init__(self, api_url: Optional[str] = None, session: Optional[requests.Session] = None):
+    def __init__(
+        self, api_url: Optional[str] = None, session: Optional[requests.Session] = None
+    ):
         self.api_url = api_url or LIMITLESS_API_URL
         self.session = session or requests.Session()
         self.logger = logging.getLogger("LimitlessClient")
         self.wallet = LIMITLESS_WALLET
         self.private_key = LIMITLESS_PK
         if not self.wallet or not self.private_key:
-            self.logger.warning("LIMITLESS_WALLET and LIMITLESS_PK must be set for authentication.")
+            self.logger.warning(
+                "LIMITLESS_WALLET and LIMITLESS_PK must be set for authentication."
+            )
 
-    def login(self, client: str = "eoa", smart_wallet: Optional[str] = None, referral: Optional[str] = None) -> bool:
+    def login(
+        self,
+        client: str = "eoa",
+        smart_wallet: Optional[str] = None,
+        referral: Optional[str] = None,
+    ) -> bool:
         """
         Authenticate with the Limitless API using wallet signature.
         - Fetches a signing message from /auth/signing-message
@@ -46,7 +57,9 @@ class LimitlessClient:
         Returns True if login is successful, False otherwise.
         """
         if not self.wallet or not self.private_key:
-            raise ValueError("LIMITLESS_WALLET and LIMITLESS_PK must be set in environment.")
+            raise ValueError(
+                "LIMITLESS_WALLET and LIMITLESS_PK must be set in environment."
+            )
         # 1. Get signing message
         url = f"{self.api_url}/auth/signing-message"
         self.logger.info(f"Fetching signing message from {url}")
@@ -58,7 +71,9 @@ class LimitlessClient:
         # 2. Sign the message
         acct = Account.from_key(self.private_key)
         message = encode_defunct(text=signing_message)
-        signature = Account.sign_message(message, private_key=self.private_key).signature.hex()
+        signature = Account.sign_message(
+            message, private_key=self.private_key
+        ).signature.hex()
         # 3. Prepare headers and body
         headers = {
             "x-account": self.wallet,
@@ -153,7 +168,13 @@ class LimitlessClient:
         # Assume data is a list of order dicts
         return [self._map_order_details(o) for o in data]
 
-    def create_order(self, order_args: OrderArgsModel, owner_id: int, order_type: str, market_slug: str) -> Dict[str, Any]:
+    def create_order(
+        self,
+        order_args: OrderArgsModel,
+        owner_id: int,
+        order_type: str,
+        market_slug: str,
+    ) -> Dict[str, Any]:
         """Create and post a new order to Limitless Exchange."""
         url = f"{self.api_url}/orders"
         self.logger.info(f"Creating order at {url} for market {market_slug}")
@@ -240,8 +261,14 @@ class LimitlessClient:
 
     def _map_orderbook(self, asset_id: str, data: dict) -> OrderbookSnapshot:
         """Map Limitless API orderbook to OrderbookSnapshot."""
-        bids = [OrderbookLevel(price=float(b["price"]), size=float(b["size"])) for b in data.get("bids", [])]
-        asks = [OrderbookLevel(price=float(a["price"]), size=float(a["size"])) for a in data.get("asks", [])]
+        bids = [
+            OrderbookLevel(price=float(b["price"]), size=float(b["size"]))
+            for b in data.get("bids", [])
+        ]
+        asks = [
+            OrderbookLevel(price=float(a["price"]), size=float(a["size"]))
+            for a in data.get("asks", [])
+        ]
         if bids and asks:
             best_bid = bids[0].price
             best_ask = asks[0].price
@@ -283,6 +310,8 @@ class LimitlessClient:
             price=float(raw.get("price", 0)),
             expiration=int(raw.get("expiration", 0)),
             order_type=raw.get("order_type", "GTC"),
-            created_at=int(raw.get("created_at", datetime.now(timezone.utc).timestamp())),
+            created_at=int(
+                raw.get("created_at", datetime.now(timezone.utc).timestamp())
+            ),
             associate_trades=raw.get("associate_trades", []),
-        ) 
+        )
