@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from src.polymarket_client import PolymarketClient
-from src.market_screener import PolymarketScreener, ScreeningCriteria, MarketOpportunity
+from src.market_screener import MarketScreener, ScreeningCriteria, MarketOpportunity
 from src.strategy import PolymarketLiquidityStrategy, LiquidityProvisionConfig
 from src.models import Position
 
@@ -54,7 +54,7 @@ def demo_market_screening():
     )
 
     # Create screener
-    screener = PolymarketScreener(client, criteria)
+    screener = MarketScreener(client, criteria)
 
     print("Screening criteria:")
     print(f"  - Min daily rewards: ${criteria.min_daily_rewards}")
@@ -125,7 +125,7 @@ def demo_strategy_analysis(opportunities: List[MarketOpportunity]):
 
     # Initialize client for orderbook data
     client = PolymarketClient()
-    screener = PolymarketScreener(client)
+    screener = MarketScreener(client)
 
     # Get orderbooks
     yes_orderbook, no_orderbook = screener.get_market_orderbooks(top_opportunity.market)

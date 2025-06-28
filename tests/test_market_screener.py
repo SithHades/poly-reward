@@ -1,5 +1,5 @@
 from unittest.mock import Mock, patch
-from src.market_screener import PolymarketScreener, ScreeningCriteria, MarketOpportunity
+from src.market_screener import MarketScreener, ScreeningCriteria, MarketOpportunity
 from src.polymarket_client import PolymarketClient
 from src.strategy import OrderbookSnapshot, OrderbookLevel
 
@@ -29,13 +29,13 @@ class TestScreeningCriteria:
         assert criteria.max_risk_level == "low"
 
 
-class TestPolymarketScreener:
+class TestMarketScreener:
     def setup_method(self):
         self.mock_client = Mock(spec=PolymarketClient)
         self.criteria = ScreeningCriteria(
             min_daily_rewards=20, max_competition_density=0.8
         )
-        self.screener = PolymarketScreener(self.mock_client, self.criteria)
+        self.screener = MarketScreener(self.mock_client, self.criteria)
 
     def test_screener_initialization(self):
         assert self.screener.client == self.mock_client
@@ -204,7 +204,7 @@ class TestPolymarketScreener:
         assert snapshot.midpoint == 0.53
         assert snapshot.spread == 0.02
 
-    @patch.object(PolymarketScreener, "get_market_orderbooks")
+    @patch.object(MarketScreener, "get_market_orderbooks")
     def test_analyze_market_opportunity(self, mock_get_orderbooks):
         # Mock orderbooks return
         yes_orderbook = OrderbookSnapshot(
@@ -366,7 +366,7 @@ class TestMarketOpportunity:
 class TestIntegrationScenarios:
     def setup_method(self):
         self.mock_client = Mock(spec=PolymarketClient)
-        self.screener = PolymarketScreener(self.mock_client)
+        self.screener = MarketScreener(self.mock_client)
 
     def test_end_to_end_screening_workflow(self):
         """Test complete workflow from market fetching to opportunity ranking"""
