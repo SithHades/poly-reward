@@ -204,9 +204,7 @@ class RunScreenerScreen(Screen):
             )
 
             self.textlog.write("Finding attractive markets...")
-            attractive_markets = await asyncio.to_thread(
-                screener_instance.find_attractive_markets
-            )
+            attractive_markets = await screener_instance.find_opportunities()
 
             if not attractive_markets:
                 self.textlog.write("[red]No attractive markets found.[/red]")

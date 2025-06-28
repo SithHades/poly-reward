@@ -70,6 +70,7 @@ class PolymarketScreener:
         criteria: Optional[ScreeningCriteria] = None,
     ):
         self.client = client
+        self.strategy = strategy
         self.criteria = criteria or ScreeningCriteria()
         self.logger = logging.getLogger("PolymarketScreener")
 
@@ -109,7 +110,7 @@ class PolymarketScreener:
                         no_token.token_id, no_orderbook, no_token.price
                     )
 
-                    market_condition = await self.strategy.analyze_market_condition(
+                    market_condition = self.strategy.analyze_market_condition(
                         yes_snapshot, no_snapshot, market=market
                     )
 
