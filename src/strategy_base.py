@@ -13,7 +13,7 @@ class BaseStrategy(ABC):
         self,
         yes_orderbook: OrderbookSnapshot,
         no_orderbook: OrderbookSnapshot,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> Any:
         """
         Analyze market conditions and return a signal or recommendation.
@@ -27,7 +27,7 @@ class BaseStrategy(ABC):
         no_orderbook: OrderbookSnapshot,
         current_positions: Dict[str, Position],
         available_capital: float,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> List[Dict[str, Any]]:
         """
         Given market data, positions, and available capital, return a list of order instructions.
@@ -40,7 +40,7 @@ class BaseStrategy(ABC):
         fill_event: OrderDetails,
         yes_orderbook: OrderbookSnapshot,
         no_orderbook: OrderbookSnapshot,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> List[Dict[str, Any]]:
         """
         React to an order fill event (e.g., for hedging or rebalancing).
@@ -53,4 +53,4 @@ class BaseStrategy(ABC):
         """
         Return the name of the strategy.
         """
-        pass 
+        pass
