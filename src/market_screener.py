@@ -52,7 +52,7 @@ class ScreeningCriteria:
     exclude_archived: bool = True  # Exclude archived markets
 
 
-class PolymarketScreener:
+class MarketScreener:
     """
     Advanced market screening system for identifying optimal liquidity provision opportunities.
 
@@ -72,7 +72,7 @@ class PolymarketScreener:
         self.client = client
         self.strategy = strategy
         self.criteria = criteria or ScreeningCriteria()
-        self.logger = logging.getLogger("PolymarketScreener")
+        self.logger = logging.getLogger("MarketScreener")
 
     async def find_opportunities(self, max_markets: int = 100) -> List[Market]:
         """
@@ -84,7 +84,7 @@ class PolymarketScreener:
 
         attractive_markets = []
         for market in all_markets:
-            if not self._is_market_eligible(market):
+            if not self._passes_basic_criteria(market):
                 continue
 
             # For 50/50 markets, we need both YES and NO orderbooks

@@ -41,8 +41,8 @@ strategies = [
 
 # Discover screeners
 market_screener_mod = importlib.import_module("market_screener")
-PolymarketScreener = getattr(market_screener_mod, "PolymarketScreener")
-screeners = [PolymarketScreener]  # Extendable for more screeners
+MarketScreener = getattr(market_screener_mod, "MarketScreener")
+screeners = [MarketScreener]  # Extendable for more screeners
 
 # Import Client
 client_mod = importlib.import_module("polymarket_client")
@@ -50,6 +50,18 @@ Client = getattr(client_mod, "PolymarketClient")
 
 # Singleton Client instance
 client_instance = Client()
+
+
+def get_strategy_config(strategy_cls: Type) -> any:
+    """
+    Returns the configuration object for a given strategy class.
+    This can be expanded to load configs from a file or a UI.
+    """
+    if strategy_cls.__name__ == "EthPredictionMarketMakingStrategy":
+        return EthPredictionStrategyConfig()
+    # For other strategies, we can return a default config or None
+    # if they don't require a specific configuration.
+    return None
 
 
 class MainMenu(Screen):
@@ -190,14 +202,11 @@ class RunScreenerScreen(Screen):
     async def on_mount(self) -> None:
         self.textlog.write("Initializing screener and strategy...")
         try:
-            # Instantiate strategy (with a default config for now)
-            # This part needs to be more robust for different strategy configs
-            if self.strategy_cls.__name__ == "EthPredictionMarketMakingStrategy":
-                strategy_config = EthPredictionStrategyConfig()
-            else:
-                # Fallback for other strategies, might need specific configs
-                strategy_config = {}  # Or a default config for BaseStrategy
-            
+            # Get the appropriate config for the selected strategy
+            strategy_config = get_strategy_config(self.strategy_cls)
+
+            # Instantiate the strategy with its config
+            # Note: If a strategy has no specific config, it should handle None gracefully.
             strategy_instance = self.strategy_cls(config=strategy_config)
             screener_instance = self.screener_cls(
                 client=client_instance, strategy=strategy_instance
