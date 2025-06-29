@@ -8,12 +8,14 @@
     "files.exclude": {
       "**/__pycache__": true,
       "**/.venv": true,
-      "**/.env": true
+      "**/.env": true,
+      "**/.ipynb_checkpoints": true
     },
     "search.exclude": {
       "**/__pycache__": true,
       "**/.venv": true,
-      "**/.env": true
+      "**/.env": true,
+      "**/.ipynb_checkpoints": true
     },
     "python.envFile": "${workspaceFolder}/.env"
   },

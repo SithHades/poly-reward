@@ -14,7 +14,7 @@ from src.models import (
     OrderbookSnapshot,
     Position,
     VolatilityMetrics,
-    OrderArgsModel
+    OrderArgsModel,
 )
 from src.strategy_base import BaseStrategy
 
@@ -87,8 +87,8 @@ class EthPredictionMarketMakingStrategy(BaseStrategy):
                     {
                         "timestamp": current_time,
                         "open": last_price,  # Use last_price instead of 0 to avoid skewing calculations
-                        "high": last_price,  # Use last_price instead of 0 
-                        "low": last_price,   # Use last_price instead of 0
+                        "high": last_price,  # Use last_price instead of 0
+                        "low": last_price,  # Use last_price instead of 0
                         "close": last_price,
                         "volume": 0,
                     }
@@ -316,20 +316,28 @@ class EthPredictionMarketMakingStrategy(BaseStrategy):
             hedge_token_id = no_orderbook.asset_id
             # If we bought YES, we need to sell NO to hedge
             # If we sold YES, we need to buy NO to hedge (to cover our short position)
-            hedge_side = BookSide.SELL if fill_event.side == BookSide.BUY else BookSide.BUY
+            hedge_side = (
+                BookSide.SELL if fill_event.side == BookSide.BUY else BookSide.BUY
+            )
         elif fill_event.asset_id == no_orderbook.asset_id:
             # Filled on NO, so we need to hedge with YES
             hedge_token_id = yes_orderbook.asset_id
             # If we bought NO, we need to sell YES to hedge
             # If we sold NO, we need to buy YES to hedge (to cover our short position)
-            hedge_side = BookSide.SELL if fill_event.side == BookSide.BUY else BookSide.BUY
+            hedge_side = (
+                BookSide.SELL if fill_event.side == BookSide.BUY else BookSide.BUY
+            )
         else:
-            self.logger.error(f"Filled order {fill_event.order_id} has an unknown asset_id: {fill_event.asset_id}")
+            self.logger.error(
+                f"Filled order {fill_event.order_id} has an unknown asset_id: {fill_event.asset_id}"
+            )
             return hedge_orders
 
         # The price for the hedge order should be based on the 1 - filled_price relationship
         hedge_price = 1.0 - fill_event.price
-        hedge_size = fill_event.original_size # Hedge with the same size as the filled order
+        hedge_size = (
+            fill_event.original_size
+        )  # Hedge with the same size as the filled order
 
         # Ensure hedge price is within valid range
         hedge_price = max(0.01, min(0.99, hedge_price))
@@ -343,7 +351,9 @@ class EthPredictionMarketMakingStrategy(BaseStrategy):
             )
         )
 
-        self.logger.info(f"Generated hedge order for fill {fill_event.order_id}: {hedge_side.value} {hedge_size} of {hedge_token_id} at {hedge_price}")
+        self.logger.info(
+            f"Generated hedge order for fill {fill_event.order_id}: {hedge_side.value} {hedge_size} of {hedge_token_id} at {hedge_price}"
+        )
 
         return hedge_orders
 

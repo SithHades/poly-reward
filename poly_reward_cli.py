@@ -19,7 +19,10 @@ import os
 import inspect
 from typing import Type
 
-from src.eth_prediction_strategy import EthPredictionMarketMakingStrategy, EthPredictionStrategyConfig
+from src.eth_prediction_strategy import (
+    EthPredictionMarketMakingStrategy,
+    EthPredictionStrategyConfig,
+)
 
 # Dynamic import helpers
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
@@ -232,7 +235,9 @@ class RunEthPredictionStrategyScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static("[bold]Running ETH Prediction Strategy[/bold]", id="title")
-        self.textlog = RichLog(highlight=True, markup=True, wrap=True, id="strategy-log")
+        self.textlog = RichLog(
+            highlight=True, markup=True, wrap=True, id="strategy-log"
+        )
         yield self.textlog
         yield ListView(ListItem(Label("Back")), id="back-list")
         yield Footer()
@@ -241,7 +246,11 @@ class RunEthPredictionStrategyScreen(Screen):
         self.textlog.write("Initializing ETH Prediction Strategy...")
         try:
             strategy_config = EthPredictionStrategyConfig()
-            strategy_instance: EthPredictionMarketMakingStrategy = eth_prediction_strategy_mod.EthPredictionMarketMakingStrategy(config=strategy_config)
+            strategy_instance: EthPredictionMarketMakingStrategy = (
+                eth_prediction_strategy_mod.EthPredictionMarketMakingStrategy(
+                    config=strategy_config
+                )
+            )
 
             # For demonstration, we'll use a dummy market and orderbooks
             # In a real scenario, you'd fetch these from PolymarketClient
@@ -272,9 +281,9 @@ class RunEthPredictionStrategyScreen(Screen):
                 is_50_50_outcome=True,
                 tokens=[
                     TokenInfo(token_id="yes-token-id", outcome="Yes", price=0.5),
-                    TokenInfo(token_id="no-token-id", outcome="No", price=0.5)
+                    TokenInfo(token_id="no-token-id", outcome="No", price=0.5),
                 ],
-                tags=[]
+                tags=[],
             )
 
             # Create dummy orderbooks
@@ -283,14 +292,14 @@ class RunEthPredictionStrategyScreen(Screen):
                 bids=[OrderbookLevel(price=0.49, size=100)],
                 asks=[OrderbookLevel(price=0.51, size=100)],
                 midpoint=0.5,
-                spread=0.02
+                spread=0.02,
             )
             no_orderbook = OrderbookSnapshot(
                 asset_id="no-token-id",
                 bids=[OrderbookLevel(price=0.49, size=100)],
                 asks=[OrderbookLevel(price=0.51, size=100)],
                 midpoint=0.5,
-                spread=0.02
+                spread=0.02,
             )
 
             self.textlog.write("Calculating orders...")
@@ -304,7 +313,9 @@ class RunEthPredictionStrategyScreen(Screen):
             else:
                 self.textlog.write("[green]Calculated Orders:[/green]")
                 for order in orders:
-                    self.textlog.write(f"- {order.side.value} {order.size} of {order.token_id} at {order.price}")
+                    self.textlog.write(
+                        f"- {order.side.value} {order.size} of {order.token_id} at {order.price}"
+                    )
         except Exception as e:
             self.textlog.write(f"[red]Error: {e}[/red]")
 
@@ -316,7 +327,9 @@ class GetEthPredictionScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static("[bold]ETH Price Prediction[/bold]", id="title")
-        self.textlog = RichLog(highlight=True, markup=True, wrap=True, id="prediction-log")
+        self.textlog = RichLog(
+            highlight=True, markup=True, wrap=True, id="prediction-log"
+        )
         yield self.textlog
         yield ListView(ListItem(Label("Back")), id="back-list")
         yield Footer()
@@ -325,9 +338,15 @@ class GetEthPredictionScreen(Screen):
         self.textlog.write("Fetching ETH price prediction...")
         try:
             strategy_config = EthPredictionStrategyConfig()
-            strategy_instance: EthPredictionMarketMakingStrategy = eth_prediction_strategy_mod.EthPredictionMarketMakingStrategy(config=strategy_config)
+            strategy_instance: EthPredictionMarketMakingStrategy = (
+                eth_prediction_strategy_mod.EthPredictionMarketMakingStrategy(
+                    config=strategy_config
+                )
+            )
             prediction = await strategy_instance.get_eth_price_prediction()
-            self.textlog.write(f"[green]Prediction: {prediction['direction'].upper()} with confidence {prediction['confidence']:.2f}[/green]")
+            self.textlog.write(
+                f"[green]Prediction: {prediction['direction'].upper()} with confidence {prediction['confidence']:.2f}[/green]"
+            )
         except Exception as e:
             self.textlog.write(f"[red]Error: {e}[/red]")
 
@@ -564,6 +583,7 @@ class PolyRewardApp(App):
 
     async def on_mount(self) -> None:
         await self.push_screen(MainMenu())
+
 
 def main():
     PolyRewardApp().run()
