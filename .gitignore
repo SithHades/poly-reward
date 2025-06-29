@@ -34,3 +34,6 @@ node_modules/
 
 # jupyter
 .ipynb_checkpoints/
+
+# data
+data/

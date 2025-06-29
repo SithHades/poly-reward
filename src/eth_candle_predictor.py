@@ -119,13 +119,24 @@ class EthCandlePredictor:
         if len(period_data) < 30:  # Need at least 30 minutes of data
             return {}
 
+        # Find the price closest to the 45-minute mark
+        ts_45 = target_hour + pd.Timedelta(minutes=45)
+        time_diffs = np.abs(df_1min.index - ts_45)
+        closest_idx = time_diffs.argmin()
+
+        # Validate we found a reasonable match (within 2 minutes of target)
+        if time_diffs[closest_idx] > pd.Timedelta(minutes=2):
+            self.logger.warning(f"No data close to 45-minute mark for {target_hour}")
+            return {}
+
+        current_price = df_1min.iloc[closest_idx]["close"]
+
         features = {}
 
         # Basic price action features
         open_price = period_data.iloc[0]["open"]
         high_price = period_data["high"].max()
         low_price = period_data["low"].min()
-        current_price = period_data.iloc[-1]["close"]  # Price at 45min mark
 
         features["open_price"] = open_price
         features["high_price"] = high_price
