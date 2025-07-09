@@ -116,8 +116,8 @@ class CandleTrainer:
                     multi_tf_data=multi_tf_data
                 )
                 
-                # Create labels
-                labels = self.feature_engineer.create_labels(data_1m, self.prediction_horizon)
+                # Create labels (for proper 1-hour candles)
+                labels = self.feature_engineer.create_labels(data_1m)
                 
                 # Align features and labels
                 min_length = min(len(features), len(labels))

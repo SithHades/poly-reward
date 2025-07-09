@@ -1,17 +1,30 @@
 # Deep Learning Candle Direction Predictor 🕯️📈
 
-A comprehensive deep learning module for predicting 1-hour crypto candle directions (green/red) with confidence scores. This module supports real-time predictions at any point during a candle and is designed for integration with prediction market agents like Polymarket.
+A comprehensive deep learning module for predicting proper 1-hour crypto candle directions (green/red) with confidence scores. This module predicts whether the NEXT proper 1-hour candle (starting at top of hour, e.g., 10:00-11:00, 11:00-12:00) will close higher than it opens. Supports real-time predictions at any point during the current candle and is designed for integration with prediction market agents like Polymarket.
 
 ## 🎯 Overview
 
 This module provides:
-- **Real-time predictions** at any minute/second within a 1-hour candle
+- **Proper 1-hour candle predictions** - Predicts the next candle starting at top of hour (e.g., 10:00-11:00)
+- **Real-time predictions** at any minute/second within the current candle
+- **Clear prediction target** - Whether the target candle closes higher than it opens (green vs red)
 - **Multiple model architectures** (LSTM, Transformer, CNN-LSTM)
 - **Comprehensive feature engineering** with technical indicators
 - **Multi-timeframe analysis** (1m, 5m, 15m, 1h data)
 - **Confidence scoring** for prediction market integration
 - **Backtesting and evaluation** tools
 - **Live simulation capabilities**
+
+### 🎯 Prediction Target
+
+**Important**: This model predicts proper 1-hour candles only:
+- ✅ **Proper candles**: 01:00-02:00, 10:00-11:00, 15:00-16:00
+- ❌ **Not predicted**: 01:12-02:12, 10:15-11:15, arbitrary 60-minute periods
+
+**Examples**:
+- At 10:15 → Predicts 11:00-12:00 candle direction
+- At 10:45 → Predicts 11:00-12:00 candle direction  
+- At 10:59 → Predicts 11:00-12:00 candle direction
 
 ## 📊 Supported Markets
 
@@ -73,9 +86,10 @@ predictor = CandleDirectionPredictor(model_path="path/to/trained/model")
 
 # Make a prediction
 result = predictor.predict_candle_direction('ETHUSDT')
+print(f"Target Candle: {result['target_candle_start']} - {result['target_candle_end']}")
 print(f"Direction: {result['direction']}")  # 'up' or 'down'
 print(f"Confidence: {result['confidence']:.3f}")  # 0.0 - 1.0
-print(f"Candle Progress: {result['candle_progress']:.2f}")  # 0.0 - 1.0
+print(f"Current Candle Progress: {result['current_candle_progress']:.2f}")  # 0.0 - 1.0
 ```
 
 ### Training a Model

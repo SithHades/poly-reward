@@ -194,7 +194,13 @@ class CandleDirectionPredictor:
                                current_time: Optional[datetime] = None,
                                return_features: bool = False) -> Dict[str, Union[str, float]]:
         """
-        Predict the direction of the next 1-hour candle.
+        Predict the direction of the next proper 1-hour candle.
+        
+        This predicts whether the NEXT proper 1-hour candle (starting at top of hour) 
+        will close higher than it opens. For example:
+        - At 10:15, predicts the 11:00-12:00 candle direction
+        - At 10:45, predicts the 11:00-12:00 candle direction
+        - At 10:59, predicts the 11:00-12:00 candle direction
         
         Args:
             symbol: Trading symbol (e.g., 'ETHUSDT')
@@ -206,10 +212,12 @@ class CandleDirectionPredictor:
             {
                 'symbol': 'ETHUSDT',
                 'current_time': datetime,
-                'direction': 'up' or 'down',
-                'confidence': float (0-1),
-                'candle_progress': float (0-1),
-                'minutes_into_candle': int,
+                'target_candle_start': datetime,  # Start of predicted candle
+                'target_candle_end': datetime,    # End of predicted candle  
+                'direction': 'up' or 'down',     # Predicted candle direction
+                'confidence': float (0-1),       # Model confidence
+                'current_candle_progress': float (0-1),  # Progress in current candle
+                'minutes_into_current_candle': int,      # Minutes elapsed in current candle
                 'model_type': str,
                 'features': DataFrame (if return_features=True)
             }
@@ -251,20 +259,26 @@ class CandleDirectionPredictor:
             # Make prediction
             direction, confidence = self.model.predict_direction_and_confidence(X)
             
-            # Calculate candle progress
-            candle_start = current_time.replace(minute=0, second=0, microsecond=0)
-            minutes_into_candle = (current_time - candle_start).total_seconds() / 60
-            candle_progress = minutes_into_candle / 60
+            # Calculate current candle progress (proper 1-hour candle)
+            current_candle_start = current_time.replace(minute=0, second=0, microsecond=0)
+            current_candle_end = current_candle_start + timedelta(hours=1)
+            minutes_into_current_candle = (current_time - current_candle_start).total_seconds() / 60
+            current_candle_progress = minutes_into_current_candle / 60
+            
+            # Calculate target candle (the one we're predicting)
+            target_candle_start = current_candle_end  # Next proper hour
+            target_candle_end = target_candle_start + timedelta(hours=1)
             
             result = {
                 'symbol': symbol,
                 'current_time': current_time,
+                'target_candle_start': target_candle_start,
+                'target_candle_end': target_candle_end,
                 'direction': direction,
                 'confidence': confidence,
-                'candle_progress': candle_progress,
-                'minutes_into_candle': int(minutes_into_candle),
-                'model_type': self.model.model_type,
-                'prediction_horizon_minutes': self.prediction_horizon
+                'current_candle_progress': current_candle_progress,
+                'minutes_into_current_candle': int(minutes_into_current_candle),
+                'model_type': self.model.model_type
             }
             
             if return_features:
@@ -359,7 +373,10 @@ class CandleDirectionPredictor:
     
     def get_candle_progress_info(self, current_time: Optional[datetime] = None) -> Dict[str, Union[int, float, bool, datetime]]:
         """
-        Get information about current position within the 1-hour candle.
+        Get information about current position within the proper 1-hour candle.
+        
+        The current candle is always the proper 1-hour candle (starting at top of hour).
+        Also provides information about the target candle being predicted.
         
         Args:
             current_time: Current time (defaults to now)
@@ -370,22 +387,28 @@ class CandleDirectionPredictor:
         if current_time is None:
             current_time = datetime.now()
         
-        # Find the start of current 1-hour candle
-        candle_start = current_time.replace(minute=0, second=0, microsecond=0)
-        candle_end = candle_start + timedelta(hours=1)
+        # Find the current proper 1-hour candle (always starts at top of hour)
+        current_candle_start = current_time.replace(minute=0, second=0, microsecond=0)
+        current_candle_end = current_candle_start + timedelta(hours=1)
         
-        # Calculate progress
-        elapsed = current_time - candle_start
-        remaining = candle_end - current_time
+        # Calculate progress in current candle
+        elapsed = current_time - current_candle_start
+        remaining = current_candle_end - current_time
         
         minutes_elapsed = elapsed.total_seconds() / 60
         minutes_remaining = remaining.total_seconds() / 60
         progress = minutes_elapsed / 60
         
+        # Target candle (the one we predict)
+        target_candle_start = current_candle_end
+        target_candle_end = target_candle_start + timedelta(hours=1)
+        
         return {
-            'candle_start': candle_start,
-            'candle_end': candle_end,
             'current_time': current_time,
+            'current_candle_start': current_candle_start,
+            'current_candle_end': current_candle_end,
+            'target_candle_start': target_candle_start,
+            'target_candle_end': target_candle_end,
             'minutes_elapsed': int(minutes_elapsed),
             'minutes_remaining': int(minutes_remaining),
             'progress': progress,

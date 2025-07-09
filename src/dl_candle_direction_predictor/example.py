@@ -167,13 +167,20 @@ def example_prediction_simulation():
         # Simulate prediction
         direction = random.choice(['up', 'down'])
         confidence = random.uniform(0.55, 0.95)
-        candle_progress = random.uniform(0.0, 1.0)
+        current_candle_progress = random.uniform(0.0, 1.0)
+        
+        # Simulate current and target candle times
+        now = datetime.now()
+        current_candle_start = now.replace(minute=0, second=0, microsecond=0)
+        target_candle_start = current_candle_start + timedelta(hours=1)
+        target_candle_end = target_candle_start + timedelta(hours=1)
         
         print(f"\n📊 {symbol}:")
-        print(f"  Direction: {direction}")
+        print(f"  Target Candle: {target_candle_start.strftime('%H:%M')}-{target_candle_end.strftime('%H:%M')}")
+        print(f"  Predicted Direction: {direction}")
         print(f"  Confidence: {confidence:.3f}")
-        print(f"  Candle Progress: {candle_progress:.2f}")
-        print(f"  Minutes into candle: {int(candle_progress * 60)}")
+        print(f"  Current Candle Progress: {current_candle_progress:.2f}")
+        print(f"  Minutes into current candle: {int(current_candle_progress * 60)}")
         
         # Simulate decision making based on confidence
         if confidence > 0.8:
@@ -198,20 +205,20 @@ def example_candle_progress_info():
         progress_info = predictor.get_candle_progress_info()
         
         print("🕐 Current candle information:")
-        print(f"  Candle Start: {progress_info['candle_start']}")
         print(f"  Current Time: {progress_info['current_time']}")
-        print(f"  Candle End: {progress_info['candle_end']}")
+        print(f"  Current Candle: {progress_info['current_candle_start']} - {progress_info['current_candle_end']}")
+        print(f"  Target Candle: {progress_info['target_candle_start']} - {progress_info['target_candle_end']}")
         print(f"  Minutes Elapsed: {progress_info['minutes_elapsed']}")
         print(f"  Minutes Remaining: {progress_info['minutes_remaining']}")
         print(f"  Progress: {progress_info['progress']:.2%}")
         
         # Progress categorization
         if progress_info['is_early_candle']:
-            print("  📍 Position: Early in candle (0-15 minutes)")
+            print("  📍 Position: Early in current candle (0-15 minutes)")
         elif progress_info['is_mid_candle']:
-            print("  📍 Position: Mid candle (15-45 minutes)")
+            print("  📍 Position: Mid current candle (15-45 minutes)")
         else:
-            print("  📍 Position: Late in candle (45-60 minutes)")
+            print("  📍 Position: Late in current candle (45-60 minutes)")
             
     except Exception as e:
         print(f"Error getting candle progress: {e}")

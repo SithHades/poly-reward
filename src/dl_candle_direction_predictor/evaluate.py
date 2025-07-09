@@ -125,15 +125,17 @@ class CandleEvaluator:
             for _, row in results_df.iterrows():
                 current_time = pd.to_datetime(row['current_time'])
                 
-                # Find the 1-hour candle that this prediction is for
-                candle_start = current_time.replace(minute=0, second=0, microsecond=0)
-                candle_end = candle_start + timedelta(hours=1)
+                # Find the target proper 1-hour candle that this prediction is for
+                # The target is always the next proper hour after the current time
+                current_candle_start = current_time.replace(minute=0, second=0, microsecond=0)
+                target_candle_start = current_candle_start + timedelta(hours=1)
                 
-                # Get the actual candle
-                candle_data = hourly_data[hourly_data.index == candle_end]
+                # Get the actual 1-hour candle data for the target candle
+                candle_data = hourly_data[hourly_data.index == target_candle_start]
                 
                 if len(candle_data) > 0:
                     candle = candle_data.iloc[0]
+                    # Actual direction: up if close > open, down otherwise
                     actual_direction = 'up' if candle['close'] > candle['open'] else 'down'
                     actual_outcomes.append(actual_direction)
                 else:
@@ -293,8 +295,11 @@ class CandleEvaluator:
         progress_bins = [0.0, 0.25, 0.5, 0.75, 1.0]
         bin_labels = ['0-25%', '25-50%', '50-75%', '75-100%']
         
+        # Use the correct field name for current candle progress
+        progress_field = 'current_candle_progress' if 'current_candle_progress' in valid_results.columns else 'candle_progress'
+        
         valid_results['progress_bin'] = pd.cut(
-            valid_results['candle_progress'],
+            valid_results[progress_field],
             bins=progress_bins,
             labels=bin_labels,
             include_lowest=True
@@ -433,13 +438,14 @@ class CandleEvaluator:
                                        for interval in accuracy_by_conf.index], rotation=45)
         
         # 2. Accuracy by candle progress
-        if 'candle_progress' in valid_results.columns:
-            progress_bins = pd.cut(valid_results['candle_progress'], bins=10)
+        progress_field = 'current_candle_progress' if 'current_candle_progress' in valid_results.columns else 'candle_progress'
+        if progress_field in valid_results.columns:
+            progress_bins = pd.cut(valid_results[progress_field], bins=10)
             accuracy_by_progress = valid_results.groupby(progress_bins)['prediction_correct'].mean()
             
             axes[0, 1].plot(range(len(accuracy_by_progress)), accuracy_by_progress.values, marker='o')
-            axes[0, 1].set_title('Accuracy by Candle Progress')
-            axes[0, 1].set_xlabel('Candle Progress')
+            axes[0, 1].set_title('Accuracy by Current Candle Progress')
+            axes[0, 1].set_xlabel('Current Candle Progress')
             axes[0, 1].set_ylabel('Accuracy')
             axes[0, 1].grid(True)
         
