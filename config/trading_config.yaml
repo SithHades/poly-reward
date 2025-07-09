@@ -1,0 +1,52 @@
+# ETH Polymarket Trading Bot Configuration
+
+# Model Settings
+model:
+  type: "logistic"            # Best performing model from analysis
+  confidence_threshold: 0.75  # Minimum confidence (75%) to place orders
+  retrain_interval_hours: 24  # Retrain model every 24 hours
+
+# Trading Settings
+trading:
+  max_position_size: 5.0    # Maximum USD to risk per trade
+  max_daily_trades: 24      # Maximum number of trades per day
+  order_timeout_minutes: 30 # Cancel orders after 30 minutes
+  min_edge: 0.05            # Minimum edge required (5%)
+
+# Market Settings
+markets:
+  ethusdt_series_slug: "ethusdt"  # ETHUSDT series slug from constants
+  min_liquidity: 50.0             # Minimum market liquidity in USD
+  max_spread: 0.10                # Maximum bid-ask spread (10%)
+  min_time_to_close: 30           # Minimum minutes before market closes
+  max_time_to_close: 90           # Maximum minutes before market closes
+  max_markets_to_check: 5         # Maximum future markets to analyze
+
+# Data Settings
+data:
+  refresh_interval_seconds: 10  # Refresh ETH data every 10 seconds
+  historical_days: 90           # Days of historical data for training
+  prediction_window:
+    start_minute: 43            # Start checking at 43 minutes
+    end_minute: 47              # Stop checking at 47 minutes
+
+# Risk Management
+risk:
+  max_total_exposure: 200.0    # Maximum total exposure across all positions
+  kelly_fraction: 0.25         # Conservative Kelly fraction
+  max_position_percentage: 0.1 # Maximum 10% of bankroll per position
+
+# Logging
+logging:
+  level: "INFO"               # DEBUG, INFO, WARNING, ERROR
+  file: "eth_trading_bot.log"
+  max_file_size_mb: 100
+  backup_count: 5
+
+# API Settings
+api:
+  binance:
+    rate_limit_ms: 1200       # Rate limit for Binance API
+  polymarket:
+    rate_limit_requests: 50   # Requests per 10 seconds
+    timeout_seconds: 30       # API timeout

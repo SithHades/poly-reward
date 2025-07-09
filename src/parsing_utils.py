@@ -1,11 +1,16 @@
 import re
+from typing import Literal
+from constants import MARKETS
 from src.models import Market, Rewards, SimplifiedMarket, TokenInfo
 from dateutil import tz
 from dateutil.parser import parse as parse_date
-from datetime import datetime
+from datetime import datetime, timedelta, tzinfo
 
 
-ET_TZ = tz.gettz("America/New_York")
+# Timezone definitions
+UTC = tz.UTC
+ET = tz.gettz("America/New_York")
+CEST = tz.gettz("Europe/Berlin")  # Use Berlin as it's more reliable for CEST
 
 
 def map_market(raw: dict) -> Market:
@@ -131,6 +136,8 @@ def transform_gamma_market_to_simplified(market: dict) -> SimplifiedMarket:
         else None
     )
 
+    slug = market.get("slug", "")
+
     return SimplifiedMarket(
         condition_id=market["conditionId"],
         rewards=rewards,
@@ -139,6 +146,7 @@ def transform_gamma_market_to_simplified(market: dict) -> SimplifiedMarket:
         closed=market.get("closed", False),
         archived=market.get("archived", False),
         accepting_orders=market.get("acceptingOrders", False),
+        slug=slug,
     )
 
 
@@ -153,8 +161,69 @@ def extract_datetime_from_slug(slug):
         date_str = f"{month_str} {day_str} {hour_str}{meridiem}"
         # Parse with current year, assume ET timezone
         dt = parse_date(date_str + f" {datetime.now().year}", fuzzy=True).replace(
-            tzinfo=ET_TZ
+            tzinfo=ET
         )
         return dt
     except Exception:
         return None
+
+
+def create_slug_from_datetime(dt: datetime, slug: Literal["ethereum", "bitcoin", "solana", "xrp"]="ethereum") -> str:
+    """
+    Create a slug for an ETH hourly prediction market of the form:
+    ethereum-up-or-down-july-7-5am-et
+    :param dt: The datetime to create the slug for.
+    :param slug: The cryptocurrency type for the slug.
+    :return: The slug.
+    """
+    # Convert to 12-hour format without leading zero
+    hour_12 = dt.strftime('%I').lstrip('0') or '12'  # Handle midnight case
+    month = dt.strftime('%B').lower()
+    am_pm = dt.strftime('%p').lower()
+    
+    return f"{slug}-up-or-down-{month}-{dt.day}-{hour_12}{am_pm}-et"
+
+
+def convert_to_et(dt: datetime, source_tz: tzinfo = None) -> datetime:
+    """Convert datetime from source timezone to ET"""
+    if dt.tzinfo is None:
+        if source_tz is None:
+            raise ValueError("source_tz must be provided for naive datetime")
+        dt = dt.replace(tzinfo=source_tz)
+    return dt.astimezone(ET)
+
+
+def get_current_market_hour_et() -> datetime:
+    """Get the current market hour in ET (rounded down to the hour)"""
+    now_et = datetime.now(ET)
+    return now_et.replace(minute=0, second=0, microsecond=0)
+
+
+def get_next_market_hour_et() -> datetime:
+    """Get the next market hour in ET"""
+    current_hour = get_current_market_hour_et()
+    return current_hour + timedelta(hours=1)
+
+
+def get_current_market_slug(crypto: MARKETS = "ethereum") -> str:
+    """Get the slug for the current market hour"""
+    current_hour_et = get_current_market_hour_et()
+    return create_slug_from_datetime(current_hour_et, crypto)
+
+
+def get_next_market_slug(crypto: MARKETS = "ethereum") -> str:
+    """Get the slug for the next market hour"""
+    next_hour_et = get_next_market_hour_et()
+    return create_slug_from_datetime(next_hour_et, crypto)
+
+
+def convert_utc_to_market_slug(utc_dt: datetime, crypto: MARKETS = "ethereum") -> str:
+    """Convert UTC datetime to market slug"""
+    et_dt = convert_to_et(utc_dt, UTC)
+    return create_slug_from_datetime(et_dt, crypto)
+
+
+def convert_cest_to_market_slug(cest_dt: datetime, crypto: MARKETS = "ethereum") -> str:
+    """Convert CEST datetime to market slug"""
+    et_dt = convert_to_et(cest_dt, CEST)
+    return create_slug_from_datetime(et_dt, crypto)

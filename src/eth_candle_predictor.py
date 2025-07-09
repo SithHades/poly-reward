@@ -22,8 +22,10 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split, cross_val_score, TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
 import joblib
+
+
+random_state = 42
 
 
 @dataclass
@@ -84,14 +86,14 @@ class EthCandlePredictor:
                 max_depth=10,
                 min_samples_split=20,
                 min_samples_leaf=10,
-                random_state=42,
+                random_state=random_state,
             )
         elif model_type == "gradient_boost":
             self.model = GradientBoostingClassifier(
-                n_estimators=100, max_depth=6, learning_rate=0.1, random_state=42
+                n_estimators=100, max_depth=6, learning_rate=0.1, random_state=random_state
             )
         elif model_type == "logistic":
-            self.model = LogisticRegression(random_state=42, max_iter=1000)
+            self.model = LogisticRegression(random_state=random_state, max_iter=1000)
         else:
             raise ValueError(f"Unsupported model type: {model_type}")
 
@@ -380,9 +382,11 @@ class EthCandlePredictor:
         # Calculate metrics
         from sklearn.metrics import (
             accuracy_score,
+            confusion_matrix,
             precision_score,
             recall_score,
             f1_score,
+            roc_auc_score
         )
 
         accuracy = accuracy_score(y_test, y_pred)
@@ -402,11 +406,11 @@ class EthCandlePredictor:
         )
 
         self.logger.info(f"Model Performance:")
-        self.logger.info(f"  Accuracy: {accuracy:.3f}")
-        self.logger.info(f"  Precision: {precision:.3f}")
-        self.logger.info(f"  Recall: {recall:.3f}")
-        self.logger.info(f"  F1 Score: {f1:.3f}")
-        self.logger.info(f"  AUC Score: {auc:.3f}")
+        self.logger.info(f"\tAccuracy: {accuracy:.3f}")
+        self.logger.info(f"\tPrecision: {precision:.3f}")
+        self.logger.info(f"\tRecall: {recall:.3f}")
+        self.logger.info(f"\tF1 Score: {f1:.3f}")
+        self.logger.info(f"\tAUC Score: {auc:.3f}")
 
         # Feature importance (for tree-based models)
         if hasattr(self.model, "feature_importances_"):
@@ -419,7 +423,7 @@ class EthCandlePredictor:
 
             self.logger.info("Top 10 Most Important Features:")
             for _, row in feature_importance.head(10).iterrows():
-                self.logger.info(f"  {row['feature']}: {row['importance']:.3f}")
+                self.logger.info(f"\t{row['feature']}: {row['importance']:.3f}")
 
         return performance
 

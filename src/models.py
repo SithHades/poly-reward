@@ -127,6 +127,7 @@ class SimplifiedMarket(BaseModel):
     closed: bool
     archived: bool
     accepting_orders: bool
+    slug: Annotated[str, Field(description="Slug of the market")] = ""
 
 
 class Position(BaseModel):
@@ -278,3 +279,11 @@ class VolatilityMetrics:
             recent_midpoint_volatility > midpoint_threshold
             or recent_spread_volatility > spread_threshold
         )
+
+
+class Position(BaseModel):
+    token_id: str
+    size: float
+    avg_price: float
+    current_price: float | None = None
+    last_updated: datetime | None = None

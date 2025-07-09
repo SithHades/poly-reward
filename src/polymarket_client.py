@@ -22,7 +22,7 @@ from ratelimit import limits, sleep_and_retry
 import requests
 
 from src.parsing_utils import (
-    ET_TZ,
+    ET,
     extract_datetime_from_slug,
     map_market,
     map_simplified_market,
@@ -35,6 +35,7 @@ from src.models import (
     Midpoint,
     OrderArgsModel,
     OrderDetails,
+    Position,
     PricesResponse,
     SimplifiedMarket,
     Spread,
@@ -65,12 +66,15 @@ class PolymarketClient:
         address: Optional[str] = None,
     ):
         self.logger = logging.getLogger("Client")
+
+        self.browser_address = address or os.getenv("BROWSER_ADDRESS")
+
         client = ClobClient(
             host,
             key=(key or os.getenv("PK")) or "",
             chain_id=POLYGON,
             signature_type=1,
-            funder=(address or os.getenv("BROWSER_ADDRESS")) or "",
+            funder=self.browser_address or "",
         )
 
         rate_limits = {
@@ -666,74 +670,56 @@ class PolymarketClient:
             else:
                 return []
 
-    def get_newest_future_series_markets(
-        self, id: Optional[str] = None, slug: Optional[str] = None, limit: int = 10
-    ):
+    def get_market_by_slug(self, slug: str) -> Market:
         """
-        Get the newest future series markets.
-        :param limit: The maximum number of markets to return.
-        :return: List of the newest future series markets.
+        Get market by slug.
+        :param slug: The slug of the market to get.
+        :return: The market.
         """
-        if not id and not slug:
-            raise ValueError("Either 'id' or 'slug' must be provided.")
-        res = requests.get("https://gamma-api.polymarket.com/series")
+        self.logger.info(f"Getting market by slug: {slug}")
+        res = requests.get(f"https://gamma-api.polymarket.com/markets?slug={slug}")
         if res.status_code != 200:
-            self.logger.error(f"Failed to fetch series markets: {res.text}")
+            self.logger.error(f"Failed to fetch market by slug: {res.text}")
+            return None
+        markets_list = res.json()
+        if not markets_list:
+            self.logger.error("No markets found for the given slug.")
+            return None
+        if len(markets_list) > 1:
+            market_raw = next(m for m in markets_list if m.get("slug") == slug)
+        else:
+            market_raw = markets_list[0]
+        market = self.get_market(market_raw.get("conditionId"))
+        if not market:
+            raise ValueError(f"Market not found for slug: {slug}")
+        return market
+
+    def get_positions(self) -> list[Position]:
+        """
+        Get all positions.
+        :return: List of positions.
+        """
+        self.logger.info("Getting all positions")
+        if not self.browser_address:
+            raise ValueError("BROWSER_ADDRESS is not set")
+        url = "https://data-api.polymarket.com/positions"
+        response = requests.request("GET", url + "?user=" + self.browser_address)
+        if response.status_code != 200:
+            self.logger.error(f"Failed to fetch positions: {response.text}")
             return []
-        series_data = res.json()
-        series = next(
-            (s for s in series_data if s.get("id") == id or s.get("slug") == slug),
-            None,
-        )
-        events = series.get("events", []) if series else []
-        now = datetime.now(tz=ET_TZ)
-        # order by the extracted datetime from the slug
-        filtered_events = [
-            d
-            for d in events
-            if (dt := extract_datetime_from_slug(d["slug"])) and dt > now
-        ]
-
-        def event_sort_key(event):
-            dt = extract_datetime_from_slug(event["slug"])
-            # fallback to datetime.min if parsing fails
-            return (dt or datetime.min.replace(tzinfo=ET_TZ), event["slug"])
-
-        filtered_events.sort(key=event_sort_key, reverse=False)
-        filtered_events = filtered_events[:limit]
-        # Batch the requests to a maximum of 20 slugs per request
-        raw_markets = []
-        for i in range(0, len(filtered_events), 20):
-            batch = filtered_events[i : i + 20]
-            query_params = "&".join(f"slug={event['slug']}" for event in batch)
-            resp = requests.get(
-                f"https://gamma-api.polymarket.com/markets?{query_params}"
+        json_data = response.json()
+        positions = [
+            Position(
+                    token_id=position.get("asset"),
+                    size=position.get("size", 0),
+                    avg_price=position.get("avgPrice", 0),
+                    current_price=position.get("curPrice", 0),
+                    last_updated=datetime.now(ET),
             )
-            if resp.status_code != 200:
-                self.logger.error(f"Failed to fetch markets batch: {resp.text}")
-                continue
-            batch_data = resp.json()
-            if batch_data:
-                raw_markets.extend(batch_data)
-        if not raw_markets:
-            self.logger.error("No markets found for the given series.")
-            return []
-        # sort raw markets by slug to timestamp again, as the API does not guarantee order
-        raw_markets.sort(
-            key=lambda x: extract_datetime_from_slug(x.get("slug", ""))
-            or datetime.min.replace(tzinfo=ET_TZ)
-        )
-        markets = []
-        try:
-            for market in raw_markets:
-                if isinstance(market, dict):
-                    markets.append(transform_gamma_market_to_simplified(market))
-                else:
-                    self.logger.error(f"Unexpected data type: {type(market)}")
-        except Exception as e:
-            self.logger.error(f"Error transforming markets: {e}")
-            return []
-        return markets
+            for position in json_data
+        ]
+        self.logger.info(f"Found {len(positions)} positions")
+        return positions
 
 
 if __name__ == "__main__":

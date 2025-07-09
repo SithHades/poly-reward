@@ -1,7 +1,15 @@
+from typing import Literal
+
+
 DEFAULT_MIDPOINT = 0.5
 DEFAULT_SPREAD = 0.0
 DEFAULT_TICK_SIZE = 0.001
 
-INTERESTING_SERIES_SLUGS = {"ethusdt": "eth-up-or-down-hourly"}
+MARKETS = Literal["ethereum", "bitcoin", "solana", "xrp"]
 
-INTERESTING_SERIES_IDS = {"ethusdt": "10117"}
+TICKERS = {
+    "ethereum": "ETH/USDT",
+    "bitcoin": "BTC/USDT",
+    "solana": "SOL/USDT",
+    "xrp": "XRP/USDT",
+}
