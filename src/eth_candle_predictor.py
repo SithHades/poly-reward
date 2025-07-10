@@ -10,19 +10,18 @@ The model uses various technical indicators and statistical features extracted f
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, Tuple
 from dataclasses import dataclass
 import logging
-from datetime import datetime, timezone, timedelta
 import warnings
 
 warnings.filterwarnings("ignore")
 
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split, cross_val_score, TimeSeriesSplit
-from sklearn.preprocessing import StandardScaler
-import joblib
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier  # noqa: E402
+from sklearn.linear_model import LogisticRegression  # noqa: E402
+from sklearn.model_selection import cross_val_score, TimeSeriesSplit  # noqa: E402
+from sklearn.preprocessing import StandardScaler  # noqa: E402
+import joblib  # noqa: E402
 
 
 random_state = 42
@@ -90,7 +89,10 @@ class EthCandlePredictor:
             )
         elif model_type == "gradient_boost":
             self.model = GradientBoostingClassifier(
-                n_estimators=100, max_depth=6, learning_rate=0.1, random_state=random_state
+                n_estimators=100,
+                max_depth=6,
+                learning_rate=0.1,
+                random_state=random_state,
             )
         elif model_type == "logistic":
             self.model = LogisticRegression(random_state=random_state, max_iter=1000)
@@ -386,7 +388,7 @@ class EthCandlePredictor:
             precision_score,
             recall_score,
             f1_score,
-            roc_auc_score
+            roc_auc_score,
         )
 
         accuracy = accuracy_score(y_test, y_pred)
@@ -405,7 +407,7 @@ class EthCandlePredictor:
             confusion_matrix=cm,
         )
 
-        self.logger.info(f"Model Performance:")
+        self.logger.info("Model Performance:")
         self.logger.info(f"\tAccuracy: {accuracy:.3f}")
         self.logger.info(f"\tPrecision: {precision:.3f}")
         self.logger.info(f"\tRecall: {recall:.3f}")

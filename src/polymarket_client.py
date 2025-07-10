@@ -23,10 +23,8 @@ import requests
 
 from src.parsing_utils import (
     ET,
-    extract_datetime_from_slug,
     map_market,
     map_simplified_market,
-    transform_gamma_market_to_simplified,
 )
 from src.constants import DEFAULT_MIDPOINT, DEFAULT_SPREAD, DEFAULT_TICK_SIZE
 from src.models import (
@@ -710,11 +708,11 @@ class PolymarketClient:
         json_data = response.json()
         positions = [
             Position(
-                    token_id=position.get("asset"),
-                    size=position.get("size", 0),
-                    avg_price=position.get("avgPrice", 0),
-                    current_price=position.get("curPrice", 0),
-                    last_updated=datetime.now(ET),
+                market_id=position.get("asset"),
+                size=position.get("size", 0),
+                entry_price=position.get("avgPrice", 0),
+                current_price=position.get("curPrice", 0),
+                last_updated=datetime.now(ET),
             )
             for position in json_data
         ]

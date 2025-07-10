@@ -69,7 +69,7 @@ class LimitlessClient:
         if not isinstance(signing_message, str):
             raise ValueError("Signing message response is not a string.")
         # 2. Sign the message
-        
+
         message = encode_defunct(text=signing_message)
         signature = Account.sign_message(
             message, private_key=self.private_key

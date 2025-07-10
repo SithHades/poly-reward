@@ -171,7 +171,9 @@ def extract_datetime_from_slug(slug):
         return None
 
 
-def create_slug_from_datetime(dt: datetime, slug: Literal["ethereum", "bitcoin", "solana", "xrp"]="ethereum") -> str:
+def create_slug_from_datetime(
+    dt: datetime, slug: Literal["ethereum", "bitcoin", "solana", "xrp"] = "ethereum"
+) -> str:
     """
     Create a slug for an ETH hourly prediction market of the form:
     ethereum-up-or-down-july-7-5am-et
@@ -180,10 +182,10 @@ def create_slug_from_datetime(dt: datetime, slug: Literal["ethereum", "bitcoin",
     :return: The slug.
     """
     # Convert to 12-hour format without leading zero
-    hour_12 = dt.strftime('%I').lstrip('0') or '12'  # Handle midnight case
-    month = dt.strftime('%B').lower()
-    am_pm = dt.strftime('%p').lower()
-    
+    hour_12 = dt.strftime("%I").lstrip("0") or "12"  # Handle midnight case
+    month = dt.strftime("%B").lower()
+    am_pm = dt.strftime("%p").lower()
+
     return f"{slug}-up-or-down-{month}-{dt.day}-{hour_12}{am_pm}-et"
 
 
@@ -198,20 +200,20 @@ def slug_to_datetime(slug: str, year: Optional[int] = None) -> datetime:
     # Pattern to match: {crypto}-up-or-down-{month}-{day}-{hour}{am/pm}-et
     pattern = r"([a-z]+)-up-or-down-([a-z]+)-(\d+)-(\d+)(am|pm)-et"
     match = re.search(pattern, slug)
-    
+
     if not match:
         return None
-    
+
     _, month_str, day_str, hour_str, meridiem = match.groups()
-    
+
     try:
         # Use provided year or current year
         if year is None:
             year = datetime.now().year
-        
+
         # Build a date string like "July 7 2024 5am"
         date_str = f"{month_str} {day_str} {year} {hour_str}{meridiem}"
-        
+
         # Parse the date string and set ET timezone
         dt = parse_date(date_str, fuzzy=True).replace(tzinfo=ET)
         return dt

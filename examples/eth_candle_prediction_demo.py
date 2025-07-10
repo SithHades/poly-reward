@@ -26,16 +26,14 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+import plotly.express as px  # noqa: E402
+import plotly.graph_objects as go  # noqa: E402
+from plotly.subplots import make_subplots  # noqa: E402
 
-from src.eth_candle_predictor import (
+from src.eth_candle_predictor import (  # noqa: E402
     EthCandlePredictor,
     create_ensemble_predictor,
     ensemble_predict,
-    PredictionResult,
-    ModelPerformance,
 )
 
 # Setup logging
@@ -101,7 +99,7 @@ def fetch_eth_data(days: int = 30) -> pd.DataFrame:
     return df
 
 
-def create_resampled_data(df_1min: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+def create_resampled_data(df_1min: pd.DataFrame) -> dict[str, pd.DataFrame]:
     """Create resampled dataframes for different timeframes."""
     logger.info("Creating resampled data...")
 
@@ -148,7 +146,7 @@ def create_resampled_data(df_1min: pd.DataFrame) -> Dict[str, pd.DataFrame]:
         .dropna()
     )
 
-    logger.info(f"Created resampled data:")
+    logger.info("Created resampled data:")
     logger.info(f"  5-min: {len(df_5min)} candles")
     logger.info(f"  15-min: {len(df_15min)} candles")
     logger.info(f"  1-hour: {len(df_1h)} candles")
@@ -241,7 +239,7 @@ def analyze_historical_performance(df_1min: pd.DataFrame) -> pd.DataFrame:
     red_candles = total_candles - green_candles
     flip_rate = flip_df["flipped"].mean()
 
-    logger.info(f"Historical Analysis Results:")
+    logger.info("Historical Analysis Results:")
     logger.info(f"  Total candles analyzed: {total_candles}")
     logger.info(
         f"  Green candles: {green_candles} ({green_candles / total_candles:.1%})"
@@ -281,7 +279,7 @@ def train_single_model(
     return predictor, performance
 
 
-def train_ensemble_models(df_1min: pd.DataFrame) -> Dict[str, EthCandlePredictor]:
+def train_ensemble_models(df_1min: pd.DataFrame) -> dict[str, EthCandlePredictor]:
     """Train ensemble of different models."""
     logger.info("Training ensemble of models...")
 
@@ -290,7 +288,7 @@ def train_ensemble_models(df_1min: pd.DataFrame) -> Dict[str, EthCandlePredictor
     return models
 
 
-def make_predictions_demo(models: Dict[str, EthCandlePredictor], df_1min: pd.DataFrame):
+def make_predictions_demo(models: dict[str, EthCandlePredictor], df_1min: pd.DataFrame):
     """Demonstrate making predictions on recent data."""
     logger.info("Making predictions on recent data...")
 
@@ -376,7 +374,7 @@ def make_predictions_demo(models: Dict[str, EthCandlePredictor], df_1min: pd.Dat
 
 
 def plot_prediction_analysis(
-    df_1min: pd.DataFrame, flip_df: pd.DataFrame, predictions: List[Dict] = None
+    df_1min: pd.DataFrame, flip_df: pd.DataFrame, predictions: list[dict] = None
 ):
     """Create comprehensive plots for prediction analysis."""
 
