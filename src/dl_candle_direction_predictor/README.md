@@ -1,30 +1,38 @@
 # Deep Learning Candle Direction Predictor 🕯️📈
 
-A comprehensive deep learning module for predicting proper 1-hour crypto candle directions (green/red) with confidence scores. This module predicts whether the NEXT proper 1-hour candle (starting at top of hour, e.g., 10:00-11:00, 11:00-12:00) will close higher than it opens. Supports real-time predictions at any point during the current candle and is designed for integration with prediction market agents like Polymarket.
+A comprehensive deep learning module for predicting proper 1-hour crypto candle directions (green/red) with confidence scores. This module predicts whether the CURRENT proper 1-hour candle (in progress, e.g., 10:00-11:00) will close green or red. Perfect for Polymarket betting where you need to predict the final direction of the current candle while it's still in progress.
 
 ## 🎯 Overview
 
 This module provides:
-- **Proper 1-hour candle predictions** - Predicts the next candle starting at top of hour (e.g., 10:00-11:00)
+- **Current candle prediction** - Predicts if the current proper 1-hour candle will close green/red
 - **Real-time predictions** at any minute/second within the current candle
-- **Clear prediction target** - Whether the target candle closes higher than it opens (green vs red)
+- **Polymarket integration** - Perfect for betting on current candle direction
+- **Current candle analysis** - Shows how the candle is performing so far (e.g., +1.2%)
 - **Multiple model architectures** (LSTM, Transformer, CNN-LSTM)
 - **Comprehensive feature engineering** with technical indicators
 - **Multi-timeframe analysis** (1m, 5m, 15m, 1h data)
-- **Confidence scoring** for prediction market integration
+- **Confidence scoring** for comparing with market prices
 - **Backtesting and evaluation** tools
 - **Live simulation capabilities**
 
 ### 🎯 Prediction Target
 
-**Important**: This model predicts proper 1-hour candles only:
-- ✅ **Proper candles**: 01:00-02:00, 10:00-11:00, 15:00-16:00
-- ❌ **Not predicted**: 01:12-02:12, 10:15-11:15, arbitrary 60-minute periods
+**Key**: This model predicts the CURRENT candle's final direction:
+- ✅ **Current proper candles**: If at 10:45, predicts if 10:00-11:00 closes green/red
+- 🎯 **Polymarket use case**: "Will the current 1h ETHUSDT candle close green?"
+- ⏰ **Prime betting time**: 45+ minutes into candle (model has enough data)
 
 **Examples**:
-- At 10:15 → Predicts 11:00-12:00 candle direction
-- At 10:45 → Predicts 11:00-12:00 candle direction  
-- At 10:59 → Predicts 11:00-12:00 candle direction
+- At 10:15 → Predicts if 10:00-11:00 candle will close green/red
+- At 10:45 → Predicts if 10:00-11:00 candle will close green/red (prime betting time!)  
+- At 10:59 → Predicts if 10:00-11:00 candle will close green/red (last chance)
+
+**Betting Strategy**: 
+1. At 10:45, candle is +1% (green so far)
+2. Model predicts 90% confidence it stays green
+3. Compare with Polymarket "green" price (e.g., $0.85)
+4. If model confidence > market price, place bet
 
 ## 📊 Supported Markets
 
@@ -84,12 +92,14 @@ from src.dl_candle_direction_predictor import CandleDirectionPredictor
 # Initialize predictor with trained model
 predictor = CandleDirectionPredictor(model_path="path/to/trained/model")
 
-# Make a prediction
+# Make a prediction about CURRENT candle direction
 result = predictor.predict_candle_direction('ETHUSDT')
-print(f"Target Candle: {result['target_candle_start']} - {result['target_candle_end']}")
-print(f"Direction: {result['direction']}")  # 'up' or 'down'
-print(f"Confidence: {result['confidence']:.3f}")  # 0.0 - 1.0
-print(f"Current Candle Progress: {result['current_candle_progress']:.2f}")  # 0.0 - 1.0
+print(f"Current Candle: {result['current_candle_start']} - {result['current_candle_end']}")
+print(f"Candle Performance So Far: {result['current_candle_performance_pct']:.2f}%")
+print(f"Predicted Final Direction: {result['direction']}")  # 'up' or 'down'
+print(f"Model Confidence: {result['confidence']:.3f}")  # 0.0 - 1.0
+print(f"Candle Progress: {result['current_candle_progress']:.2f}")  # 0.0 - 1.0
+print(f"Prime Betting Time: {result['is_late_candle']}")  # True if 45+ min into candle
 ```
 
 ### Training a Model

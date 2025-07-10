@@ -194,13 +194,15 @@ class CandleDirectionPredictor:
                                current_time: Optional[datetime] = None,
                                return_features: bool = False) -> Dict[str, Union[str, float]]:
         """
-        Predict the direction of the next proper 1-hour candle.
+        Predict the final direction of the CURRENT proper 1-hour candle.
         
-        This predicts whether the NEXT proper 1-hour candle (starting at top of hour) 
-        will close higher than it opens. For example:
-        - At 10:15, predicts the 11:00-12:00 candle direction
-        - At 10:45, predicts the 11:00-12:00 candle direction
-        - At 10:59, predicts the 11:00-12:00 candle direction
+        This predicts whether the CURRENT proper 1-hour candle (the one in progress) 
+        will close green (higher than open) or red (lower than open). For example:
+        - At 10:15, predicts if the 10:00-11:00 candle will close green/red
+        - At 10:45, predicts if the 10:00-11:00 candle will close green/red (prime betting time)
+        - At 10:59, predicts if the 10:00-11:00 candle will close green/red
+        
+        Perfect for Polymarket betting: compare model confidence with market prices.
         
         Args:
             symbol: Trading symbol (e.g., 'ETHUSDT')
@@ -212,12 +214,15 @@ class CandleDirectionPredictor:
             {
                 'symbol': 'ETHUSDT',
                 'current_time': datetime,
-                'target_candle_start': datetime,  # Start of predicted candle
-                'target_candle_end': datetime,    # End of predicted candle  
-                'direction': 'up' or 'down',     # Predicted candle direction
-                'confidence': float (0-1),       # Model confidence
-                'current_candle_progress': float (0-1),  # Progress in current candle
-                'minutes_into_current_candle': int,      # Minutes elapsed in current candle
+                'current_candle_start': datetime,     # Start of current candle being predicted
+                'current_candle_end': datetime,       # End of current candle being predicted
+                'current_candle_progress': float (0-1),      # How far through current candle
+                'current_candle_performance_pct': float,     # How candle is performing so far (e.g., +1.2%)
+                'direction': 'up' or 'down',         # Predicted final direction (green/red)
+                'confidence': float (0-1),           # Model confidence (compare with Polymarket prices)
+                'minutes_into_candle': int,           # Minutes elapsed in current candle
+                'minutes_remaining': int,             # Minutes until candle closes
+                'is_late_candle': bool,              # True if good time for betting (45+ min)
                 'model_type': str,
                 'features': DataFrame (if return_features=True)
             }
@@ -259,25 +264,36 @@ class CandleDirectionPredictor:
             # Make prediction
             direction, confidence = self.model.predict_direction_and_confidence(X)
             
-            # Calculate current candle progress (proper 1-hour candle)
+            # Calculate current candle info (the candle we're predicting)
             current_candle_start = current_time.replace(minute=0, second=0, microsecond=0)
             current_candle_end = current_candle_start + timedelta(hours=1)
-            minutes_into_current_candle = (current_time - current_candle_start).total_seconds() / 60
-            current_candle_progress = minutes_into_current_candle / 60
+            minutes_into_candle = (current_time - current_candle_start).total_seconds() / 60
+            minutes_remaining = 60 - minutes_into_candle
+            current_candle_progress = minutes_into_candle / 60
             
-            # Calculate target candle (the one we're predicting)
-            target_candle_start = current_candle_end  # Next proper hour
-            target_candle_end = target_candle_start + timedelta(hours=1)
+            # Get current candle performance so far
+            current_candle_performance_pct = 0.0
+            if 'current_candle_change_pct' in features.columns:
+                # Get the current performance from features (how candle is doing so far)
+                current_candle_performance_pct = float(features['current_candle_change_pct'].iloc[-1])
+            
+            # Betting timing info
+            is_late_candle = minutes_into_candle >= 45  # Good time for betting
+            is_very_late_candle = minutes_into_candle >= 55  # Last chance betting
             
             result = {
                 'symbol': symbol,
                 'current_time': current_time,
-                'target_candle_start': target_candle_start,
-                'target_candle_end': target_candle_end,
+                'current_candle_start': current_candle_start,
+                'current_candle_end': current_candle_end,
+                'current_candle_progress': current_candle_progress,
+                'current_candle_performance_pct': current_candle_performance_pct,
                 'direction': direction,
                 'confidence': confidence,
-                'current_candle_progress': current_candle_progress,
-                'minutes_into_current_candle': int(minutes_into_current_candle),
+                'minutes_into_candle': int(minutes_into_candle),
+                'minutes_remaining': int(minutes_remaining),
+                'is_late_candle': is_late_candle,
+                'is_very_late_candle': is_very_late_candle,
                 'model_type': self.model.model_type
             }
             
@@ -371,23 +387,23 @@ class CandleDirectionPredictor:
         
         return df
     
-    def get_candle_progress_info(self, current_time: Optional[datetime] = None) -> Dict[str, Union[int, float, bool, datetime]]:
+    def get_candle_progress_info(self, current_time: Optional[datetime] = None) -> Dict[str, Union[int, float, bool, datetime, str]]:
         """
-        Get information about current position within the proper 1-hour candle.
+        Get information about the current proper 1-hour candle being predicted.
         
-        The current candle is always the proper 1-hour candle (starting at top of hour).
-        Also provides information about the target candle being predicted.
+        Returns details about the current candle (the one we're predicting) and
+        timing information useful for Polymarket betting decisions.
         
         Args:
             current_time: Current time (defaults to now)
             
         Returns:
-            Dictionary with candle progress information
+            Dictionary with current candle information
         """
         if current_time is None:
             current_time = datetime.now()
         
-        # Find the current proper 1-hour candle (always starts at top of hour)
+        # Find the current proper 1-hour candle (the one we're predicting)
         current_candle_start = current_time.replace(minute=0, second=0, microsecond=0)
         current_candle_end = current_candle_start + timedelta(hours=1)
         
@@ -399,22 +415,29 @@ class CandleDirectionPredictor:
         minutes_remaining = remaining.total_seconds() / 60
         progress = minutes_elapsed / 60
         
-        # Target candle (the one we predict)
-        target_candle_start = current_candle_end
-        target_candle_end = target_candle_start + timedelta(hours=1)
+        # Betting timing analysis
+        is_early = minutes_elapsed < 15        # Too early for reliable predictions
+        is_mid = 15 <= minutes_elapsed < 45    # Building confidence
+        is_late = minutes_elapsed >= 45        # Prime betting time
+        is_very_late = minutes_elapsed >= 55   # Last chance, high confidence needed
         
         return {
             'current_time': current_time,
             'current_candle_start': current_candle_start,
             'current_candle_end': current_candle_end,
-            'target_candle_start': target_candle_start,
-            'target_candle_end': target_candle_end,
             'minutes_elapsed': int(minutes_elapsed),
             'minutes_remaining': int(minutes_remaining),
             'progress': progress,
-            'is_early_candle': minutes_elapsed < 15,
-            'is_mid_candle': 15 <= minutes_elapsed < 45,
-            'is_late_candle': minutes_elapsed >= 45
+            'is_early_candle': is_early,
+            'is_mid_candle': is_mid,
+            'is_late_candle': is_late,
+            'is_very_late_candle': is_very_late,
+            'betting_recommendation': (
+                'too_early' if is_early else
+                'building_confidence' if is_mid else
+                'prime_betting_time' if is_late and not is_very_late else
+                'last_chance_high_confidence_only'
+            )
         }
     
     def clear_cache(self) -> None:

@@ -1,12 +1,14 @@
 """
 Example usage of the Deep Learning Candle Direction Predictor.
 
-This script demonstrates basic functionality including:
+This script demonstrates predicting the CURRENT candle's final direction
+for Polymarket betting. Basic functionality includes:
 1. Data loading and preparation
-2. Feature engineering
+2. Feature engineering with current candle progress
 3. Model training (simplified)
-4. Making predictions
-5. Basic evaluation
+4. Making predictions about current candle direction
+5. Polymarket betting decision simulation
+6. Basic evaluation
 """
 
 import os
@@ -176,19 +178,27 @@ def example_prediction_simulation():
         target_candle_end = target_candle_start + timedelta(hours=1)
         
         print(f"\n📊 {symbol}:")
-        print(f"  Target Candle: {target_candle_start.strftime('%H:%M')}-{target_candle_end.strftime('%H:%M')}")
-        print(f"  Predicted Direction: {direction}")
-        print(f"  Confidence: {confidence:.3f}")
-        print(f"  Current Candle Progress: {current_candle_progress:.2f}")
-        print(f"  Minutes into current candle: {int(current_candle_progress * 60)}")
+        print(f"  Current Candle: {current_candle_start.strftime('%H:%M')}-{target_candle_start.strftime('%H:%M')}")
+        print(f"  Candle Performance So Far: {random.uniform(-2.5, 2.5):.2f}%")
+        print(f"  Predicted Final Direction: {direction}")
+        print(f"  Model Confidence: {confidence:.3f}")
+        print(f"  Candle Progress: {current_candle_progress:.2f}")
+        print(f"  Minutes into candle: {int(current_candle_progress * 60)}")
+        print(f"  Minutes remaining: {60 - int(current_candle_progress * 60)}")
+        print(f"  Prime betting time: {current_candle_progress >= 0.75}")
         
-        # Simulate decision making based on confidence
-        if confidence > 0.8:
-            print(f"  💡 High confidence - consider trading")
+        # Simulate Polymarket decision making
+        market_price = random.uniform(0.4, 0.9)  # Simulated market price for direction
+        print(f"  📈 Polymarket '{direction}' price: ${market_price:.2f}")
+        
+        if confidence > market_price and confidence > 0.75:
+            print(f"  💰 BET OPPORTUNITY: Model confidence ({confidence:.2f}) > Market price (${market_price:.2f})")
+        elif confidence > 0.8:
+            print(f"  💡 High confidence but check market prices")
         elif confidence > 0.65:
-            print(f"  ⚖️ Medium confidence - proceed with caution")
+            print(f"  ⚖️ Medium confidence - wait for better opportunity")
         else:
-            print(f"  🚫 Low confidence - avoid trading")
+            print(f"  🚫 Low confidence - avoid betting")
 
 
 def example_candle_progress_info():
@@ -204,21 +214,23 @@ def example_candle_progress_info():
         # Get candle progress info
         progress_info = predictor.get_candle_progress_info()
         
-        print("🕐 Current candle information:")
+        print("🕐 Current candle information (the one being predicted):")
         print(f"  Current Time: {progress_info['current_time']}")
         print(f"  Current Candle: {progress_info['current_candle_start']} - {progress_info['current_candle_end']}")
-        print(f"  Target Candle: {progress_info['target_candle_start']} - {progress_info['target_candle_end']}")
         print(f"  Minutes Elapsed: {progress_info['minutes_elapsed']}")
         print(f"  Minutes Remaining: {progress_info['minutes_remaining']}")
         print(f"  Progress: {progress_info['progress']:.2%}")
+        print(f"  Betting Recommendation: {progress_info['betting_recommendation']}")
         
-        # Progress categorization
+        # Progress categorization for betting
         if progress_info['is_early_candle']:
-            print("  📍 Position: Early in current candle (0-15 minutes)")
+            print("  📍 Position: Early in candle (0-15 min) - too early for reliable predictions")
         elif progress_info['is_mid_candle']:
-            print("  📍 Position: Mid current candle (15-45 minutes)")
+            print("  📍 Position: Mid candle (15-45 min) - building confidence")
+        elif progress_info['is_late_candle'] and not progress_info['is_very_late_candle']:
+            print("  📍 Position: Late candle (45-55 min) - PRIME BETTING TIME!")
         else:
-            print("  📍 Position: Late in current candle (45-60 minutes)")
+            print("  📍 Position: Very late candle (55-60 min) - last chance, need high confidence")
             
     except Exception as e:
         print(f"Error getting candle progress: {e}")

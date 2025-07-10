@@ -125,13 +125,12 @@ class CandleEvaluator:
             for _, row in results_df.iterrows():
                 current_time = pd.to_datetime(row['current_time'])
                 
-                # Find the target proper 1-hour candle that this prediction is for
-                # The target is always the next proper hour after the current time
+                # Find the CURRENT proper 1-hour candle that this prediction is for
+                # We predict the current candle's final direction, not the next one
                 current_candle_start = current_time.replace(minute=0, second=0, microsecond=0)
-                target_candle_start = current_candle_start + timedelta(hours=1)
                 
-                # Get the actual 1-hour candle data for the target candle
-                candle_data = hourly_data[hourly_data.index == target_candle_start]
+                # Get the actual 1-hour candle data for the current candle
+                candle_data = hourly_data[hourly_data.index == current_candle_start]
                 
                 if len(candle_data) > 0:
                     candle = candle_data.iloc[0]

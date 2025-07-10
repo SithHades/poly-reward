@@ -327,40 +327,42 @@ class FeatureEngineer:
     
     def create_labels(self, df: pd.DataFrame) -> pd.Series:
         """
-        Create labels for proper 1-hour candle direction prediction.
+        Create labels for CURRENT proper 1-hour candle direction prediction.
         
-        Labels predict whether the NEXT proper 1-hour candle (starting at top of hour)
+        Labels predict whether the CURRENT proper 1-hour candle (the one in progress)
         will close higher than it opens. For example:
-        - At 10:15, predict if the 11:00-12:00 candle closes > opens
-        - At 10:45, predict if the 11:00-12:00 candle closes > opens
+        - At 10:15, predict if the 10:00-11:00 candle will close green/red
+        - At 10:45, predict if the 10:00-11:00 candle will close green/red
+        
+        This is used for Polymarket betting where you want to predict the final
+        direction of the current candle while it's still in progress.
         
         Args:
             df: DataFrame with minute-level OHLCV data (datetime index)
             
         Returns:
-            Series with binary labels (1 for up candle, 0 for down candle)
+            Series with binary labels (1 for green candle, 0 for red candle)
         """
         labels = []
         
         for timestamp in df.index:
-            # Find the next proper 1-hour candle start time
-            current_hour = timestamp.replace(minute=0, second=0, microsecond=0)
-            next_hour_start = current_hour + timedelta(hours=1)
-            next_hour_end = next_hour_start + timedelta(hours=1)
+            # Find the current proper 1-hour candle that contains this timestamp
+            current_candle_start = timestamp.replace(minute=0, second=0, microsecond=0)
+            current_candle_end = current_candle_start + timedelta(hours=1)
             
-            # Find the open and close of the target 1-hour candle
-            target_candle_data = df[(df.index >= next_hour_start) & (df.index < next_hour_end)]
+            # Get all data for the current candle (complete candle)
+            current_candle_data = df[(df.index >= current_candle_start) & (df.index < current_candle_end)]
             
-            if len(target_candle_data) > 0:
-                # Get open (first minute) and close (last minute) of target candle
-                candle_open = target_candle_data['open'].iloc[0]
-                candle_close = target_candle_data['close'].iloc[-1]
+            if len(current_candle_data) > 0:
+                # Get open (first minute) and close (last minute) of current candle
+                candle_open = current_candle_data['open'].iloc[0]
+                candle_close = current_candle_data['close'].iloc[-1]
                 
-                # Label is 1 if candle closes higher than it opens (green candle)
+                # Label is 1 if current candle closes higher than it opens (green)
                 label = 1 if candle_close > candle_open else 0
                 labels.append(label)
             else:
-                # No data available for target candle
+                # No complete data available for current candle
                 labels.append(None)
         
         return pd.Series(labels, index=df.index)
@@ -370,25 +372,26 @@ class FeatureEngineer:
         """
         Create features based on progress within current proper 1-hour candle.
         
-        The current candle is always the proper 1-hour candle that contains current_time.
+        These features help predict whether the CURRENT candle will close green or red.
+        The current candle is the proper 1-hour candle containing current_time.
         For example:
-        - If current_time is 10:15, current candle is 10:00-11:00
-        - If current_time is 10:45, current candle is 10:00-11:00
+        - If current_time is 10:15, current candle is 10:00-11:00 (predicting its final direction)
+        - If current_time is 10:45, current candle is 10:00-11:00 (predicting its final direction)
         
         Args:
             df: DataFrame with minute-level data
             current_time: Current timestamp within the candle
             
         Returns:
-            DataFrame with candle progress features
+            DataFrame with candle progress features for prediction
         """
         result = df.copy()
         
-        # Find the start of current proper 1-hour candle (always at top of hour)
+        # Find the current proper 1-hour candle (always starts at top of hour)
         current_candle_start = current_time.replace(minute=0, second=0, microsecond=0)
         current_candle_end = current_candle_start + timedelta(hours=1)
         
-        # Calculate progress within the current proper 1-hour candle
+        # Calculate progress within the current candle
         minutes_elapsed = (current_time - current_candle_start).total_seconds() / 60
         minutes_remaining = 60 - minutes_elapsed
         
@@ -397,13 +400,13 @@ class FeatureEngineer:
         result['minutes_remaining'] = minutes_remaining
         result['minutes_elapsed'] = minutes_elapsed
         
-        # Features based on candle progress
+        # Features based on candle progress (for betting timing)
         result['is_early_candle'] = int(minutes_elapsed < 15)
         result['is_mid_candle'] = int((minutes_elapsed >= 15) and (minutes_elapsed < 45))
-        result['is_late_candle'] = int(minutes_elapsed >= 45)
+        result['is_late_candle'] = int(minutes_elapsed >= 45)  # Prime betting time
+        result['is_very_late_candle'] = int(minutes_elapsed >= 55)  # Last-minute bets
         
-        # Current candle statistics (only using data up to current time)
-        # Get all data for the current proper 1-hour candle up to current_time
+        # Current candle performance so far (only using data up to current time)
         candle_data = df[(df.index >= current_candle_start) & (df.index <= current_time)]
         
         if len(candle_data) > 0:
@@ -411,33 +414,56 @@ class FeatureEngineer:
             result['current_candle_high'] = candle_data['high'].max()
             result['current_candle_low'] = candle_data['low'].min()
             result['current_candle_volume'] = candle_data['volume'].sum()
-            result['current_candle_close'] = candle_data['close'].iloc[-1]
+            result['current_candle_close'] = candle_data['close'].iloc[-1]  # Current price
             
-            # Current position within candle range
-            candle_range = result['current_candle_high'] - result['current_candle_low']
-            if candle_range > 0:
-                result['position_in_current_candle'] = (
-                    result['current_candle_close'] - result['current_candle_low']
-                ) / candle_range
-            else:
-                result['position_in_current_candle'] = 0.5
+            # Key feature: How is the current candle performing so far?
+            result['current_candle_change_pct'] = (
+                (result['current_candle_close'] - result['current_candle_open']) / 
+                result['current_candle_open']
+            ) * 100
             
-            # Current candle direction so far
-            result['current_candle_direction'] = int(
+            # Current candle direction so far (what Polymarket might show)
+            result['current_candle_direction_so_far'] = int(
                 result['current_candle_close'] > result['current_candle_open']
             )
             
-            # Current candle body size relative to close price
-            result['current_candle_body_size'] = abs(
-                result['current_candle_close'] - result['current_candle_open']
-            ) / result['current_candle_close']
+            # How strong is the current move?
+            result['current_candle_body_size_pct'] = abs(
+                result['current_candle_change_pct']
+            )
+            
+            # Position within the candle's range so far
+            candle_range = result['current_candle_high'] - result['current_candle_low']
+            if candle_range > 0:
+                result['current_price_position_in_range'] = (
+                    result['current_candle_close'] - result['current_candle_low']
+                ) / candle_range
+            else:
+                result['current_price_position_in_range'] = 0.5
+            
+            # Volatility within current candle
+            if len(candle_data) > 1:
+                result['current_candle_volatility'] = candle_data['close'].std()
+                result['current_candle_volatility_pct'] = (
+                    result['current_candle_volatility'] / result['current_candle_open'] * 100
+                )
+            else:
+                result['current_candle_volatility'] = 0.0
+                result['current_candle_volatility_pct'] = 0.0
+            
+            # Momentum within current candle (recent minutes vs early minutes)
+            if len(candle_data) >= 10:  # At least 10 minutes of data
+                early_avg = candle_data['close'].iloc[:5].mean() if len(candle_data) >= 5 else candle_data['close'].iloc[0]
+                recent_avg = candle_data['close'].iloc[-5:].mean()
+                result['current_candle_momentum'] = (recent_avg - early_avg) / early_avg * 100
+            else:
+                result['current_candle_momentum'] = 0.0
         
-        # Information about the target candle we're predicting
-        target_candle_start = current_candle_end  # Next proper hour
-        target_candle_end = target_candle_start + timedelta(hours=1)
-        
-        result['target_candle_start_hour'] = target_candle_start.hour
-        result['target_candle_start_timestamp'] = target_candle_start.timestamp()
+        # Trading session features (important for crypto markets)
+        result['hour_of_day'] = current_time.hour
+        result['is_asian_session'] = int(0 <= current_time.hour < 8)  # UTC
+        result['is_european_session'] = int(8 <= current_time.hour < 16)
+        result['is_american_session'] = int(16 <= current_time.hour < 24)
         
         return result
     
