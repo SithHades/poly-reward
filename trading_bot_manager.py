@@ -162,7 +162,7 @@ class TradingBotManager:
             
             print(f"\nActive {market_slug} Markets:")
             for market in markets:                
-                print(f"    Ends: {market.end_date_iso}")
+                print(f"    Ends: {market.end_date_iso.strftime('%Y-%m-%d %H:%M:%S') if market.end_date_iso else 'N/A'}")
                 print(f"    Tokens: {market.tokens}")
                 print(f"    Accepting Orders: {market.accepting_orders}")
                 print(f"    Active: {market.active}")

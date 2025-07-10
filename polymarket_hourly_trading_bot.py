@@ -24,7 +24,7 @@ import pandas as pd
 from dataclasses import dataclass, field
 
 from constants import MARKETS, TICKERS
-from parsing_utils import create_slug_from_datetime, get_current_market_hour_et, get_current_market_slug, get_next_market_slug
+from parsing_utils import ET, create_slug_from_datetime, get_current_market_hour_et, get_current_market_slug, get_next_market_slug, slug_to_datetime
 from src.eth_candle_predictor import EthCandlePredictor, PredictionResult
 from src.polymarket_client import PolymarketClient
 from src.models import Market, OrderArgsModel, BookSide, SimplifiedMarket
@@ -237,7 +237,7 @@ class PolymarketHourlyTradingBot:
             # Log market details for debugging
             for market in active_markets:
                 self.logger.info(f"  Market: {market.question}")
-                self.logger.info(f"  End time: {market.end_date_iso}")
+                self.logger.info(f"  End time: {market.end_date_iso.strftime('%Y-%m-%d %H:%M:%S') if market.end_date_iso else 'N/A'}")
                 self.logger.info(f"  Tokens: {list(market.tokens.keys())}")
                 self.logger.info(f"  Liquidity: ${order_books[market.tokens[0].token_id].get_liquidity():,.2f}")
             
@@ -486,6 +486,9 @@ class PolymarketHourlyTradingBot:
                 self.state.orders_placed.append(order_id)
                 self.state.daily_trade_count += 1
                 
+                market_close_time = slug_to_datetime(market.market_slug) + timedelta(hours=1)
+                market_close_time = market_close_time.replace(tzinfo=ET)
+
                 # Create position tracker
                 position_tracker = PositionTracker(
                     order_id=order_id,
@@ -497,7 +500,7 @@ class PolymarketHourlyTradingBot:
                     entry_time=datetime.now(timezone.utc),
                     predicted_direction=prediction.predicted_direction,
                     confidence=prediction.confidence,
-                    market_close_time=datetime.fromisoformat(market.end_date_iso)  # TODO: properly parse the date in case the end_date_iso is not correct
+                    market_close_time=market_close_time
                 )
                 
                 # Add to open positions

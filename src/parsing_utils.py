@@ -1,5 +1,5 @@
 import re
-from typing import Literal
+from typing import Literal, Optional
 from constants import MARKETS
 from src.models import Market, Rewards, SimplifiedMarket, TokenInfo
 from dateutil import tz
@@ -33,6 +33,9 @@ def map_market(raw: dict) -> Market:
                 min_size=rewards_data.get("min_size", 0),
                 max_spread=rewards_data.get("max_spread", 0),
             )
+        end_date_iso = raw.get("end_date_iso", None)
+        if end_date_iso:
+            end_date_iso = datetime.fromisoformat(end_date_iso)
         # Build Market
         return Market(
             enable_order_book=raw.get("enable_order_book", False),
@@ -47,7 +50,7 @@ def map_market(raw: dict) -> Market:
             question=raw.get("question", ""),
             description=raw.get("description", ""),
             market_slug=raw.get("market_slug", ""),
-            end_date_iso=raw.get("end_date_iso", ""),
+            end_date_iso=end_date_iso,
             maker_base_fee=raw.get("maker_base_fee", 0),
             taker_base_fee=raw.get("taker_base_fee", 0),
             notifications_enabled=raw.get("notifications_enabled", False),
@@ -182,6 +185,38 @@ def create_slug_from_datetime(dt: datetime, slug: Literal["ethereum", "bitcoin",
     am_pm = dt.strftime('%p').lower()
     
     return f"{slug}-up-or-down-{month}-{dt.day}-{hour_12}{am_pm}-et"
+
+
+def slug_to_datetime(slug: str, year: Optional[int] = None) -> datetime:
+    """
+    Extract datetime from a slug in the format:
+    ethereum-up-or-down-july-7-5am-et
+    :param slug: The slug to parse.
+    :param year: The year to use. If None, uses current year.
+    :return: The datetime object in ET timezone.
+    """
+    # Pattern to match: {crypto}-up-or-down-{month}-{day}-{hour}{am/pm}-et
+    pattern = r"([a-z]+)-up-or-down-([a-z]+)-(\d+)-(\d+)(am|pm)-et"
+    match = re.search(pattern, slug)
+    
+    if not match:
+        return None
+    
+    _, month_str, day_str, hour_str, meridiem = match.groups()
+    
+    try:
+        # Use provided year or current year
+        if year is None:
+            year = datetime.now().year
+        
+        # Build a date string like "July 7 2024 5am"
+        date_str = f"{month_str} {day_str} {year} {hour_str}{meridiem}"
+        
+        # Parse the date string and set ET timezone
+        dt = parse_date(date_str, fuzzy=True).replace(tzinfo=ET)
+        return dt
+    except Exception:
+        return None
 
 
 def convert_to_et(dt: datetime, source_tz: tzinfo = None) -> datetime:

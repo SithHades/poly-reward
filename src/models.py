@@ -106,7 +106,7 @@ class Market(BaseModel):
     question: str
     description: str
     market_slug: str
-    end_date_iso: Optional[str] = None
+    end_date_iso: Optional[datetime] = None
     maker_base_fee: float
     taker_base_fee: float
     notifications_enabled: bool
