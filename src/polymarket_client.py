@@ -712,6 +712,7 @@ class PolymarketClient:
                 size=position.get("size", 0),
                 entry_price=position.get("avgPrice", 0),
                 current_price=position.get("curPrice", 0),
+                slug=position.get("slug", ""),
                 last_updated=datetime.now(ET),
             )
             for position in json_data

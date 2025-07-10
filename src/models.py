@@ -136,6 +136,7 @@ class Position(BaseModel):
     entry_price: float
     current_price: float | None = None
     last_updated: datetime | None = None
+    slug: str = ""
 
 
 class MarketCondition(Enum):

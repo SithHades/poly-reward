@@ -40,7 +40,7 @@ class PositionTracker:
     """Track individual position for P&L analysis"""
 
     order_id: str
-    market_question: str
+    market_slug: str
     token_id: str
     token_outcome: str
     entry_price: float
@@ -58,7 +58,7 @@ class PositionTracker:
         """Convert to dictionary for logging/storage"""
         return {
             "order_id": self.order_id,
-            "market_question": self.market_question,
+            "market_slug": self.market_slug,
             "token_outcome": self.token_outcome,
             "entry_price": self.entry_price,
             "position_size": self.position_size,
@@ -592,7 +592,7 @@ class PolymarketHourlyTradingBot:
                 # Create position tracker
                 position_tracker = PositionTracker(
                     order_id=order_id,
-                    market_question=market.question,
+                    market_slug=market.market_slug,
                     token_id=token_id,
                     token_outcome=next(
                         (
@@ -657,6 +657,18 @@ class PolymarketHourlyTradingBot:
         except Exception as e:
             self.logger.error(f"Error cancelling expired orders: {e}")
 
+    async def assess_open_positions(self):
+        """Assess open positions analysis"""
+        all_positions = self.polymarket.get_positions()
+
+        # filter all_positions to include only positions relating to the current crypto market
+        current_market_slug = self.config.market_slug
+        all_positions = [
+            position
+            for position in all_positions
+            if current_market_slug in position.slug
+        ]
+
     async def track_resolved_positions(self):
         """Track resolved positions for P&L analysis"""
         if not self.state.open_positions:
@@ -697,7 +709,7 @@ class PolymarketHourlyTradingBot:
 
                     # Log the result
                     self.logger.info(
-                        f"Position resolved: {resolved_position.market_question}"
+                        f"Position resolved: {resolved_position.market_slug}"
                     )
                     self.logger.info(f"  Outcome: {resolved_position.final_outcome}")
                     self.logger.info(f"  P&L: ${resolved_position.pnl:.2f}")
@@ -753,21 +765,19 @@ class PolymarketHourlyTradingBot:
             # Calculate P&L
             if prediction_correct:
                 # Won the bet - get back entry cost plus winnings
-                pnl = (
-                    position.position_size
-                    * (1 - position.entry_price)
-                    / position.entry_price
+                pnl = position.position_size - (
+                    position.position_size * position.entry_price
                 )
                 final_outcome = "win"
             else:
                 # Lost the bet - lose the entry cost
-                pnl = -position.position_size
+                pnl = -(position.position_size * position.entry_price)
                 final_outcome = "loss"
 
             # Create resolved position
             resolved_position = PositionTracker(
                 order_id=position.order_id,
-                market_question=position.market_question,
+                market_slug=position.market_slug,
                 token_id=position.token_id,
                 token_outcome=position.token_outcome,
                 entry_price=position.entry_price,
@@ -933,34 +943,39 @@ class PolymarketHourlyTradingBot:
                 # Cancel expired orders
                 await self.cancel_expired_orders()
 
+                # await self.assess_open_positions()
+
                 # Track resolved positions
-                # TODO: review this
-                # await self.track_resolved_positions()
+                try:
+                    await self.track_resolved_positions()
 
-                # Refresh markets every hour
-                current_time = datetime.now(timezone.utc)
-                if current_time.minute == 0:
-                    await self.refresh_markets()
+                    # Refresh markets every hour
+                    current_time = datetime.now(timezone.utc)
+                    if current_time.minute == 0:
+                        await self.refresh_markets()
 
-                    # Log performance summary every 6 hours
-                    if current_time.hour % 1 == 0:
-                        summary = self.get_performance_summary()
-                        self.logger.info(
-                            f"Performance Update: {summary['total_trades']} trades, "
-                            f"{summary['win_rate']:.1%} win rate, "
-                            f"${summary['daily_pnl']:.2f} daily P&L"
-                        )
+                        # Log performance summary every 6 hours
+                        if current_time.hour % 1 == 0:
+                            summary = self.get_performance_summary()
+                            self.logger.info(
+                                f"Performance Update: {summary['total_trades']} trades, "
+                                f"{summary['win_rate']:.1%} win rate, "
+                                f"${summary['daily_pnl']:.2f} daily P&L"
+                            )
 
-                # Reset daily counter at midnight UTC
-                if current_time.hour == 0 and current_time.minute == 0:
-                    self.log_daily_summary()
-                    self.save_position_data()
-                    self.state.daily_trade_count = 0
-                    self.state.daily_pnl = 0.0
-                    self.logger.info("Reset daily counters")
+                    # Reset daily counter at midnight UTC
+                    if current_time.hour == 0 and current_time.minute == 0:
+                        self.log_daily_summary()
+                        self.save_position_data()
+                        self.state.daily_trade_count = 0
+                        self.state.daily_pnl = 0.0
+                        self.logger.info("Reset daily counters")
 
                 # Sleep for 1 minute
-                await asyncio.sleep(60)
+                except Exception as e:
+                    self.logger.error(f"Error tracking resolved positions: {e}")
+
+                await asyncio.sleep(self.config.data_refresh_interval)
 
             except KeyboardInterrupt:
                 self.logger.info("Bot stopped by user")
