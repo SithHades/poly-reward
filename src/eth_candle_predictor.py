@@ -75,7 +75,7 @@ class EthCandlePredictor:
         self.model = None
         self.scaler = StandardScaler()
         self.feature_names = []
-        self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger("CandlePredictor")
         self.is_trained = False
 
         # Initialize model based on type
@@ -444,6 +444,9 @@ class EthCandlePredictor:
         """
         if not self.is_trained:
             raise ValueError("Model must be trained before making predictions")
+
+        self.logger.info(f"Predicting for {target_hour}")
+        self.logger.info(f"Length of provided data: {len(df_1min)}")
 
         # Extract features
         features = self.extract_features(df_1min, target_hour)

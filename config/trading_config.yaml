@@ -15,7 +15,7 @@ trading:
 
 # Market Settings
 markets:
-  ethusdt_series_slug: "ethusdt"  # ETHUSDT series slug from constants
+  market_slug: "ethereum"         # ETHUSDT series slug from constants
   min_liquidity: 50.0             # Minimum market liquidity in USD
   max_spread: 0.10                # Maximum bid-ask spread (10%)
   min_time_to_close: 30           # Minimum minutes before market closes

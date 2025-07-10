@@ -13,14 +13,15 @@ Utility script for managing the ETH Polymarket Trading Bot with additional featu
 import argparse
 import asyncio
 import logging
+import pandas as pd
 import yaml
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Any
 
-from constants import MARKETS
-from polymarket_hourly_trading_bot import PolymarketHourlyTradingBot, TradingConfig
-from parsing_utils import (
+from src.constants import MARKETS
+from src.polymarket_hourly_trading_bot import PolymarketHourlyTradingBot, TradingConfig
+from src.parsing_utils import (
     get_current_market_slug,
     get_next_market_slug,
 )
@@ -78,7 +79,7 @@ class TradingBotManager:
             max_position_size=trading_config.get("max_position_size", 5.0),
             max_daily_trades=trading_config.get("max_daily_trades", 24),
             order_timeout_minutes=trading_config.get("order_timeout_minutes", 30),
-            ethusdt_series_slug=markets_config.get("ethusdt_series_slug", "ethusdt"),
+            market_slug=markets_config.get("market_slug", "ethereum"),
             min_liquidity=markets_config.get("min_liquidity", 100.0),
             max_markets_to_check=markets_config.get("max_markets_to_check", 12),
             data_refresh_interval=data_config.get("refresh_interval_seconds", 10),
@@ -123,10 +124,12 @@ class TradingBotManager:
 
             # Get current hour
             current_time = datetime.now(timezone.utc)
-            current_hour = current_time.replace(minute=0, second=0, microsecond=0)
+            # make sure we have the full hour of data.
+            current_hour = current_time.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
 
             # Make prediction
-            prediction = bot.predictor.predict(bot.ohlcv_data, current_hour)
+            prediction = bot.predictor.predict(bot.ohlcv_data, pd.Timestamp(current_hour))
+
 
             print("\n=== ETH Candle Prediction Test ===")
             print(f"Time: {current_time.strftime('%Y-%m-%d %H:%M:%S UTC')}")

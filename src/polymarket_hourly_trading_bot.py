@@ -22,8 +22,8 @@ import ccxt
 import pandas as pd
 from dataclasses import dataclass, field
 
-from constants import MARKETS, TICKERS
-from parsing_utils import (
+from src.constants import MARKETS, TICKERS
+from src.parsing_utils import (
     ET,
     create_slug_from_datetime,
     get_current_market_hour_et,
