@@ -125,7 +125,7 @@ class TradingBotManager:
             # Get current hour
             current_time = datetime.now(timezone.utc)
             # make sure we have the full hour of data.
-            current_hour = current_time.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
+            current_hour = current_time.replace(minute=0, second=0, microsecond=0)
 
             # Make prediction
             prediction = bot.predictor.predict(bot.ohlcv_data, pd.Timestamp(current_hour))
@@ -218,13 +218,15 @@ class TradingBotManager:
             print(f"Positions: {len(positions)}")
             total_exposure = 0
             for position in positions:
-                print(f"Token ID: {position.market_id}")
+                print(f"\nToken ID: {position.market_id}")
+                print(f"Slug: {position.slug}")
                 print(f"Size: {position.size}")
                 print(f"Avg Price: {position.entry_price}")
                 print(f"Current Price: {position.current_price}")
                 exposure = float(position.current_price) * float(position.size)
                 total_exposure += exposure
 
+            print("")
             # Check against risk limits
             risk_config = self.config.get("risk", {})
             max_exposure = risk_config.get("max_total_exposure", 200.0)
@@ -312,7 +314,7 @@ async def main():
     elif args.command == "test-prediction":
         await manager.test_prediction()
     elif args.command == "check-markets":
-        await manager.check_markets()
+        await manager.check_markets(market_slug=args.slug)
     elif args.command == "check-positions":
         await manager.check_positions()
     elif args.command == "validate-config":
