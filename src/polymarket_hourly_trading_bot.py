@@ -32,46 +32,106 @@ from src.parsing_utils import (
 )
 from src.eth_candle_predictor import EthCandlePredictor, PredictionResult
 from src.polymarket_client import PolymarketClient
-from src.models import Market, OrderArgsModel, BookSide
+from src.models import Market, OrderArgsModel, BookSide, Position, OrderDetails
 
 
 @dataclass
-class PositionTracker:
-    """Track individual position for P&L analysis"""
+class OrderTracker:
+    """Track individual orders for lifecycle management"""
 
     order_id: str
     market_slug: str
     token_id: str
     token_outcome: str
-    entry_price: float
-    position_size: float
-    entry_time: datetime
+    order_price: float
+    order_size: float
+    order_time: datetime
     predicted_direction: str
     confidence: float
     market_close_time: datetime
-    resolved: bool = False
-    resolution_time: Optional[datetime] = None
-    final_outcome: Optional[str] = None  # "win" or "loss"
-    pnl: Optional[float] = None
-
+    # Order status tracking
+    status: str = "PENDING"  # PENDING, FILLED, PARTIALLY_FILLED, CANCELLED, EXPIRED
+    filled_size: float = 0.0
+    avg_fill_price: float = 0.0
+    last_status_check: Optional[datetime] = None
+    
     def to_dict(self) -> dict:
         """Convert to dictionary for logging/storage"""
         return {
             "order_id": self.order_id,
             "market_slug": self.market_slug,
             "token_outcome": self.token_outcome,
-            "entry_price": self.entry_price,
+            "order_price": self.order_price,
+            "order_size": self.order_size,
+            "order_time": self.order_time.isoformat(),
+            "predicted_direction": self.predicted_direction,
+            "confidence": self.confidence,
+            "market_close_time": self.market_close_time.isoformat(),
+            "status": self.status,
+            "filled_size": self.filled_size,
+            "avg_fill_price": self.avg_fill_price,
+            "last_status_check": self.last_status_check.isoformat() if self.last_status_check else None,
+        }
+
+
+@dataclass
+class PositionTracker:
+    """Track actual filled positions for P&L analysis"""
+
+    market_id: str
+    market_slug: str
+    token_id: str
+    token_outcome: str
+    position_size: float
+    avg_entry_price: float
+    current_price: float
+    entry_time: datetime
+    predicted_direction: str
+    confidence: float
+    market_close_time: datetime
+    # Position status
+    resolved: bool = False
+    resolution_time: Optional[datetime] = None
+    final_outcome: Optional[str] = None  # "win" or "loss"
+    pnl: Optional[float] = None
+    unrealized_pnl: Optional[float] = None
+    last_price_update: Optional[datetime] = None
+    
+    def calculate_unrealized_pnl(self) -> float:
+        """Calculate current unrealized PnL"""
+        if self.current_price is None:
+            return 0.0
+        
+        # For binary prediction markets, PnL is based on probability difference
+        # If we bought at avg_entry_price and current price is current_price
+        unrealized = self.position_size * (self.current_price - self.avg_entry_price)
+        return unrealized
+    
+    def update_current_price(self, new_price: float):
+        """Update current price and recalculate unrealized PnL"""
+        self.current_price = new_price
+        self.unrealized_pnl = self.calculate_unrealized_pnl()
+        self.last_price_update = datetime.now(timezone.utc)
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for logging/storage"""
+        return {
+            "market_id": self.market_id,
+            "market_slug": self.market_slug,
+            "token_outcome": self.token_outcome,
             "position_size": self.position_size,
+            "avg_entry_price": self.avg_entry_price,
+            "current_price": self.current_price,
             "entry_time": self.entry_time.isoformat(),
             "predicted_direction": self.predicted_direction,
             "confidence": self.confidence,
             "market_close_time": self.market_close_time.isoformat(),
             "resolved": self.resolved,
-            "resolution_time": self.resolution_time.isoformat()
-            if self.resolution_time
-            else None,
+            "resolution_time": self.resolution_time.isoformat() if self.resolution_time else None,
             "final_outcome": self.final_outcome,
             "pnl": self.pnl,
+            "unrealized_pnl": self.unrealized_pnl,
+            "last_price_update": self.last_price_update.isoformat() if self.last_price_update else None,
         }
 
 
@@ -97,6 +157,10 @@ class TradingConfig:
     data_refresh_interval: int = 30  # Refresh data every X seconds
     prediction_window_start: int = 42  # Start checking at 42 minutes
     prediction_window_end: int = 48  # Stop checking at 48 minutes
+    
+    # Position tracking settings
+    position_check_interval: int = 60  # Check positions every X seconds
+    order_status_check_interval: int = 30  # Check order status every X seconds
 
     def __post_init__(self):
         pass
@@ -108,11 +172,16 @@ class TradingState:
 
     current_hour_start: Optional[datetime] = None
     prediction_made: bool = False
-    orders_placed: List[str] = field(default_factory=list)
     daily_trade_count: int = 0
     last_data_refresh: Optional[datetime] = None
+    last_position_check: Optional[datetime] = None
+    last_order_status_check: Optional[datetime] = None
 
-    # Position tracking
+    # Order tracking (orders placed but may not be filled)
+    active_orders: Dict[str, OrderTracker] = field(default_factory=dict)
+    completed_orders: Dict[str, OrderTracker] = field(default_factory=dict)
+    
+    # Position tracking (actual filled positions)
     open_positions: Dict[str, PositionTracker] = field(default_factory=dict)
     resolved_positions: List[PositionTracker] = field(default_factory=list)
 
@@ -121,6 +190,7 @@ class TradingState:
     winning_trades: int = 0
     total_pnl: float = 0.0
     daily_pnl: float = 0.0
+    total_unrealized_pnl: float = 0.0
 
 
 class PolymarketHourlyTradingBot:
@@ -159,6 +229,9 @@ class PolymarketHourlyTradingBot:
 
         # Load Polymarket markets
         await self.refresh_markets()
+
+        # Reconcile existing positions
+        await self.reconcile_positions()
 
         self.logger.info("Bot initialization complete")
 
@@ -256,94 +329,244 @@ class PolymarketHourlyTradingBot:
                 active_markets.append(market)
 
             self.markets = active_markets
-            self.logger.info(
-                f"Found {len(active_markets)} active {self.config.market_slug} hourly markets"
-            )
 
-            # Log market details for debugging
-            for market in active_markets:
-                self.logger.info(f"  Market: {market.question}")
-                self.logger.info(
-                    f"  End time: {market.end_date_iso.strftime('%Y-%m-%d %H:%M:%S') if market.end_date_iso else 'N/A'}"
-                )
-                self.logger.info(f"  Tokens: {list(market.tokens.keys())}")
-                self.logger.info(
-                    f"  Liquidity: ${order_books[market.tokens[0].token_id].get_liquidity():,.2f}"
-                )
+            self.logger.info(f"Found {len(active_markets)} active markets")
 
         except Exception as e:
-            self.logger.error(
-                f"Error refreshing {self.config.market_slug} markets: {e}"
+            self.logger.error(f"Error refreshing {self.config.market_slug} markets: {e}")
+
+    async def reconcile_positions(self):
+        """Reconcile our internal position tracking with actual positions from Polymarket"""
+        self.logger.info("Reconciling positions with Polymarket...")
+        
+        try:
+            # Get actual positions from Polymarket
+            actual_positions = self.polymarket.get_positions_by_fuzzy_slug(self.config.market_slug)
+            
+            # Clear existing positions and rebuild from actual data
+            self.state.open_positions.clear()
+            
+            if actual_positions:
+                for position in actual_positions:
+                    if position.size > 0:  # Only track positions with actual size
+                        # Try to find corresponding market info
+                        market = self._find_market_by_token_id(position.market_id)
+                        if not market:
+                            self.logger.warning(f"Could not find market info for position {position.market_id}")
+                            continue
+                        
+                        # Create position tracker
+                        position_tracker = PositionTracker(
+                            market_id=position.market_id,
+                            market_slug=position.slug,
+                            token_id=position.market_id,
+                            token_outcome=self._get_token_outcome(market, position.market_id),
+                            position_size=position.size,
+                            avg_entry_price=position.entry_price,
+                            current_price=position.current_price or position.entry_price,
+                            entry_time=position.last_updated or datetime.now(timezone.utc),
+                            predicted_direction="unknown",  # We don't know the original prediction
+                            confidence=0.0,  # We don't know the original confidence
+                            market_close_time=self._get_market_close_time(position.slug),
+                        )
+                        
+                        # Update unrealized PnL
+                        position_tracker.update_current_price(position.current_price or position.entry_price)
+                        
+                        self.state.open_positions[position.market_id] = position_tracker
+                        
+                        self.logger.info(
+                            f"Reconciled position: {position.slug} - Size: {position.size}, "
+                            f"Entry: ${position.entry_price:.3f}, Current: ${position.current_price:.3f}"
+                        )
+            
+            # Update total unrealized PnL
+            self.state.total_unrealized_pnl = sum(
+                pos.unrealized_pnl or 0 for pos in self.state.open_positions.values()
             )
-            self.markets = []
+            
+            self.logger.info(f"Reconciled {len(self.state.open_positions)} positions")
+            
+        except Exception as e:
+            self.logger.error(f"Error reconciling positions: {e}")
+    
+    def _find_market_by_token_id(self, token_id: str) -> Optional[Market]:
+        """Find market by token ID"""
+        for market in self.markets:
+            for token in market.tokens:
+                if token.token_id == token_id:
+                    return market
+        return None
+    
+    def _get_token_outcome(self, market: Market, token_id: str) -> str:
+        """Get token outcome name"""
+        for token in market.tokens:
+            if token.token_id == token_id:
+                return token.outcome
+        return "Unknown"
+    
+    def _get_market_close_time(self, market_slug: str) -> datetime:
+        """Get market close time from slug"""
+        try:
+            market_time = slug_to_datetime(market_slug)
+            return market_time.replace(tzinfo=ET) + timedelta(hours=1)
+        except Exception:
+            return datetime.now(timezone.utc) + timedelta(hours=1)
 
     async def refresh_data(self):
-        """Refresh recent data"""
-        current_time = datetime.now(timezone.utc)
-
-        # Check if we need to refresh
+        """Refresh price data and market information"""
         if (
-            self.state.last_data_refresh
-            and (current_time - self.state.last_data_refresh).total_seconds()
-            < self.config.data_refresh_interval
+            self.state.last_data_refresh is None
+            or (datetime.now(timezone.utc) - self.state.last_data_refresh).total_seconds()
+            > self.config.data_refresh_interval
         ):
-            return
-
-        try:
-            # Get last 2 hours of data to ensure we have enough for current hour
-            # Calculate since based on last data point we have
-            if self.ohlcv_data is not None and not self.ohlcv_data.empty:
-                # Get timestamp of last candle and subtract 5 minutes for safety
-                last_timestamp = self.ohlcv_data.index[-1]
+            try:
+                # Refresh recent price data
+                current_time = datetime.now(timezone.utc)
+                symbol = TICKERS[self.config.market_slug]
+                
+                # Get data from last hour
                 since = self.exchange.parse8601(
-                    (last_timestamp - timedelta(minutes=5)).isoformat()
+                    (current_time - timedelta(hours=1)).isoformat()
                 )
-                # Calculate how many minutes we need plus safety margin
-                minutes_needed = (
-                    int((current_time - last_timestamp).total_seconds() / 60) + 5
-                )
-                limit = min(120, minutes_needed)  # Cap at 120 minutes
-            else:
-                # If no data, get last 2 hours
-                since = self.exchange.parse8601(
-                    (current_time - timedelta(hours=2)).isoformat()
-                )
-                limit = 120
-
-            # Fetch data with overlap to ensure no missing minutes
-            ohlcv = self.exchange.fetch_ohlcv(
-                TICKERS[self.config.market_slug], "1m", since, limit
-            )
-
-            if ohlcv:
-                # Convert to DataFrame
-                new_data = pd.DataFrame(
-                    ohlcv,
-                    columns=["timestamp", "open", "high", "low", "close", "volume"],
-                )
-                new_data["timestamp"] = pd.to_datetime(
-                    new_data["timestamp"], unit="ms", utc=True
-                )
-                new_data = new_data.set_index("timestamp").sort_index()
-
-                # Merge with existing data
-                self.ohlcv_data = pd.concat([self.ohlcv_data, new_data])
-                self.ohlcv_data = self.ohlcv_data[
-                    ~self.ohlcv_data.index.duplicated(keep="last")
-                ]
-                self.ohlcv_data = self.ohlcv_data.sort_index()
-
-                # Keep only last 48 hours to manage memory
-                cutoff = current_time - timedelta(hours=48)
-                self.ohlcv_data = self.ohlcv_data[self.ohlcv_data.index > cutoff]
-
+                
+                recent_ohlcv = self.exchange.fetch_ohlcv(symbol, "1m", since)
+                
+                if recent_ohlcv:
+                    # Convert to DataFrame
+                    recent_df = pd.DataFrame(
+                        recent_ohlcv, 
+                        columns=["timestamp", "open", "high", "low", "close", "volume"]
+                    )
+                    recent_df["timestamp"] = pd.to_datetime(
+                        recent_df["timestamp"], unit="ms", utc=True
+                    )
+                    recent_df = recent_df.set_index("timestamp").sort_index()
+                    
+                    # Update main data
+                    self.ohlcv_data = pd.concat([self.ohlcv_data, recent_df])
+                    self.ohlcv_data = self.ohlcv_data[
+                        ~self.ohlcv_data.index.duplicated(keep="last")
+                    ]
+                    
+                    # Keep only last 7 days to prevent memory issues
+                    cutoff_time = current_time - timedelta(days=7)
+                    self.ohlcv_data = self.ohlcv_data[self.ohlcv_data.index >= cutoff_time]
+                
                 self.state.last_data_refresh = current_time
-                self.logger.debug(
-                    f"Refreshed {self.config.market_slug} data: {len(new_data)} new candles"
-                )
+                
+            except Exception as e:
+                self.logger.error(f"Error refreshing {self.config.market_slug} data: {e}")
 
-        except Exception as e:
-            self.logger.error(f"Error refreshing {self.config.market_slug} data: {e}")
+    async def update_order_status(self):
+        """Update status of active orders"""
+        if not self.state.active_orders:
+            return
+            
+        if (
+            self.state.last_order_status_check is None
+            or (datetime.now(timezone.utc) - self.state.last_order_status_check).total_seconds()
+            > self.config.order_status_check_interval
+        ):
+            try:
+                # Get current orders from Polymarket
+                current_orders = self.polymarket.get_orders()
+                current_order_ids = {order.order_id for order in current_orders}
+                
+                # Update status of our tracked orders
+                orders_to_remove = []
+                for order_id, order_tracker in self.state.active_orders.items():
+                    # Find the current order
+                    current_order = next(
+                        (order for order in current_orders if order.order_id == order_id),
+                        None
+                    )
+                    
+                    if current_order:
+                        # Update order status
+                        order_tracker.status = current_order.status
+                        order_tracker.filled_size = current_order.matched_size
+                        order_tracker.last_status_check = datetime.now(timezone.utc)
+                        
+                        # If order is fully filled, calculate average fill price
+                        if current_order.matched_size > 0:
+                            order_tracker.avg_fill_price = current_order.price
+                        
+                        # If order is complete (filled or cancelled), move to completed
+                        if current_order.status in ["FILLED", "CANCELLED", "EXPIRED"]:
+                            orders_to_remove.append(order_id)
+                            self.state.completed_orders[order_id] = order_tracker
+                            
+                    else:
+                        # Order no longer exists, likely filled or cancelled
+                        order_tracker.status = "UNKNOWN"
+                        order_tracker.last_status_check = datetime.now(timezone.utc)
+                        orders_to_remove.append(order_id)
+                        self.state.completed_orders[order_id] = order_tracker
+                
+                # Remove completed orders from active tracking
+                for order_id in orders_to_remove:
+                    del self.state.active_orders[order_id]
+                
+                self.state.last_order_status_check = datetime.now(timezone.utc)
+                
+                if orders_to_remove:
+                    self.logger.info(f"Updated status for {len(orders_to_remove)} orders")
+                
+            except Exception as e:
+                self.logger.error(f"Error updating order status: {e}")
+
+    async def update_position_status(self):
+        """Update status and prices of current positions"""
+        if not self.state.open_positions:
+            return
+            
+        if (
+            self.state.last_position_check is None
+            or (datetime.now(timezone.utc) - self.state.last_position_check).total_seconds()
+            > self.config.position_check_interval
+        ):
+            try:
+                # Get current positions from Polymarket
+                actual_positions = self.polymarket.get_positions_by_fuzzy_slug(self.config.market_slug)
+                actual_position_dict = {pos.market_id: pos for pos in actual_positions}
+                
+                # Update our tracked positions
+                positions_to_remove = []
+                for market_id, position in self.state.open_positions.items():
+                    actual_position = actual_position_dict.get(market_id)
+                    
+                    if actual_position and actual_position.size > 0:
+                        # Update position info
+                        position.position_size = actual_position.size
+                        position.avg_entry_price = actual_position.entry_price
+                        position.update_current_price(
+                            actual_position.current_price or actual_position.entry_price
+                        )
+                    else:
+                        # Position no longer exists or size is 0
+                        positions_to_remove.append(market_id)
+                
+                # Remove closed positions
+                for market_id in positions_to_remove:
+                    closed_position = self.state.open_positions[market_id]
+                    # Check if it should be resolved
+                    if datetime.now(timezone.utc) > closed_position.market_close_time:
+                        await self._resolve_position(closed_position)
+                    del self.state.open_positions[market_id]
+                
+                # Update total unrealized PnL
+                self.state.total_unrealized_pnl = sum(
+                    pos.unrealized_pnl or 0 for pos in self.state.open_positions.values()
+                )
+                
+                self.state.last_position_check = datetime.now(timezone.utc)
+                
+                if positions_to_remove:
+                    self.logger.info(f"Updated {len(positions_to_remove)} position statuses")
+                
+            except Exception as e:
+                self.logger.error(f"Error updating position status: {e}")
 
     def should_make_prediction(self) -> bool:
         """Check if we should make a prediction based on current time"""
@@ -354,7 +577,6 @@ class PolymarketHourlyTradingBot:
         if self.state.current_hour_start != current_hour_start:
             self.state.current_hour_start = current_hour_start
             self.state.prediction_made = False
-            self.state.orders_placed = []
 
         # Check if we're in the prediction window
         minutes_elapsed = current_time.minute
@@ -392,97 +614,71 @@ class PolymarketHourlyTradingBot:
     def find_matching_markets(
         self, prediction: PredictionResult
     ) -> List[tuple[Market, str]]:
-        """Find markets that match our prediction and timing"""
+        """Find markets that match the prediction direction"""
         matching_markets = []
-        current_time = datetime.now(timezone.utc)
-        closes_in = (
-            current_time.replace(
-                hour=current_time.hour + 1, minute=0, second=0, microsecond=0
-            )
-            - current_time
-        ).total_seconds() / 60
-
-        # We want markets that close around the next hour boundary
-        current_hour_slug = get_current_market_slug()
 
         for market in self.markets:
-            # Check if market closes within reasonable time window (next 30-90 minutes)
-            market_slug = market.market_slug
+            try:
+                # Parse market slug to get the time
+                market_time = slug_to_datetime(market.market_slug)
+                current_hour_start = self.state.current_hour_start
 
-            if market_slug == current_hour_slug:  # Market closes in 30-90 minutes
-                # Find the appropriate token based on prediction
-                target_token_id = None
-
-                if prediction.predicted_direction == "green":
-                    # Look for "up", "green", "yes" tokens for green candle
+                # Check if this market corresponds to the current prediction window
+                if (
+                    market_time.replace(tzinfo=timezone.utc).replace(minute=0, second=0, microsecond=0)
+                    == current_hour_start
+                ):
+                    # Find the token that matches our prediction
                     for token in market.tokens:
-                        outcome_lower = token.outcome.lower()
-                        if any(
-                            word in outcome_lower
-                            for word in [
-                                "up",
-                                "green",
-                                "yes",
-                                "higher",
-                                "above",
-                                "rise",
-                            ]
+                        if (
+                            prediction.predicted_direction == "green"
+                            and token.outcome.lower() in ["yes", "up", "green"]
                         ):
-                            target_token_id = token.token_id
+                            matching_markets.append((market, token.token_id))
                             break
-                else:
-                    # Look for "down", "red", "no" tokens for red candle
-                    for token in market.tokens:
-                        outcome_lower = token.outcome.lower()
-                        if any(
-                            word in outcome_lower
-                            for word in ["down", "red", "no", "lower", "below", "fall"]
+                        elif (
+                            prediction.predicted_direction == "red"
+                            and token.outcome.lower() in ["no", "down", "red"]
                         ):
-                            target_token_id = token.token_id
+                            matching_markets.append((market, token.token_id))
                             break
 
-                if target_token_id:
-                    matching_markets.append((market, target_token_id))
-                    self.logger.info(f"Found matching market: {market.question}")
-                    self.logger.info(f"  Target token: {token.outcome}")
-                    self.logger.info(f"  Closes in: {closes_in:.1f} minutes")
+            except Exception as e:
+                self.logger.error(f"Error processing market {market.market_slug}: {e}")
+                continue
 
         return matching_markets
 
     async def analyze_order_book(self, token_id: str) -> dict:
-        """Analyze order book for a specific token"""
+        """Analyze the order book for a specific token"""
         try:
             order_book = self.polymarket.get_order_book(token_id)
 
-            # Calculate best bid/ask
-            best_bid = (
-                max([float(bid["price"]) for bid in order_book.bids])
-                if order_book.bids
-                else 0
-            )
-            best_ask = (
-                min([float(ask["price"]) for ask in order_book.asks])
-                if order_book.asks
-                else 1
-            )
+            if not order_book.bids or not order_book.asks:
+                return {}
 
-            # Calculate spread
-            spread = best_ask - best_bid if best_bid > 0 and best_ask < 1 else 0
+            # Get best bid and ask
+            best_bid = float(order_book.bids[0][0]) if order_book.bids else 0.0
+            best_ask = float(order_book.asks[0][0]) if order_book.asks else 1.0
+
+            # Calculate midpoint
+            midpoint = (best_bid + best_ask) / 2
 
             # Calculate total liquidity
-            bid_liquidity = sum([float(bid["size"]) for bid in order_book.bids])
-            ask_liquidity = sum([float(ask["size"]) for ask in order_book.asks])
+            bid_liquidity = sum(
+                float(price) * float(size) for price, size in order_book.bids[:5]
+            ) if order_book.bids else 0.0
+            ask_liquidity = sum(
+                float(price) * float(size) for price, size in order_book.asks[:5]
+            ) if order_book.asks else 0.0
 
             return {
                 "best_bid": best_bid,
                 "best_ask": best_ask,
-                "spread": spread,
+                "midpoint": midpoint,
                 "bid_liquidity": bid_liquidity,
                 "ask_liquidity": ask_liquidity,
-                "midpoint": (best_bid + best_ask) / 2
-                if best_bid > 0 and best_ask < 1
-                else 0.5,
-                "order_book": order_book,
+                "spread": best_ask - best_bid,
             }
 
         except Exception as e:
@@ -565,6 +761,7 @@ class PolymarketHourlyTradingBot:
                 3,
             )
             target_size = float(round(position_size))
+            
             # Create and place order
             order_args = OrderArgsModel(
                 token_id=token_id, price=target_price, size=target_size, side=side
@@ -581,7 +778,6 @@ class PolymarketHourlyTradingBot:
                 self.logger.info(f"  Price: ${target_price:.3f}")
                 self.logger.info(f"  Size: ${position_size:.2f}")
 
-                self.state.orders_placed.append(order_id)
                 self.state.daily_trade_count += 1
 
                 market_close_time = slug_to_datetime(market.market_slug) + timedelta(
@@ -589,8 +785,8 @@ class PolymarketHourlyTradingBot:
                 )
                 market_close_time = market_close_time.replace(tzinfo=ET)
 
-                # Create position tracker
-                position_tracker = PositionTracker(
+                # Create order tracker (not position tracker - position created when filled)
+                order_tracker = OrderTracker(
                     order_id=order_id,
                     market_slug=market.market_slug,
                     token_id=token_id,
@@ -602,16 +798,17 @@ class PolymarketHourlyTradingBot:
                         ),
                         "Unknown",
                     ),
-                    entry_price=target_price,
-                    position_size=target_size,
-                    entry_time=datetime.now(timezone.utc),
+                    order_price=target_price,
+                    order_size=target_size,
+                    order_time=datetime.now(timezone.utc),
                     predicted_direction=prediction.predicted_direction,
                     confidence=prediction.confidence,
                     market_close_time=market_close_time,
+                    status="PENDING",
                 )
 
-                # Add to open positions
-                self.state.open_positions[order_id] = position_tracker
+                # Add to active orders (not positions)
+                self.state.active_orders[order_id] = order_tracker
 
                 return order_id
 
@@ -622,25 +819,19 @@ class PolymarketHourlyTradingBot:
 
     async def cancel_expired_orders(self):
         """Cancel orders that have been open too long"""
-        if not self.state.orders_placed:
+        if not self.state.active_orders:
             return
 
         try:
-            # Get current orders
-            open_orders = self.polymarket.get_orders()
             current_time = datetime.now(timezone.utc)
-
             orders_to_cancel = []
-            for order in open_orders:
-                if order.order_id in self.state.orders_placed:
-                    # Check if order is older than timeout
-                    order_time = datetime.fromtimestamp(
-                        order.created_at / 1000, tz=timezone.utc
-                    )
-                    if (current_time - order_time).total_seconds() > (
-                        self.config.order_timeout_minutes * 60
-                    ):
-                        orders_to_cancel.append(order.order_id)
+            
+            for order_id, order_tracker in self.state.active_orders.items():
+                # Check if order is older than timeout
+                if (current_time - order_tracker.order_time).total_seconds() > (
+                    self.config.order_timeout_minutes * 60
+                ):
+                    orders_to_cancel.append(order_id)
 
             if orders_to_cancel:
                 self.logger.info(f"Cancelling {len(orders_to_cancel)} expired orders")
@@ -649,25 +840,57 @@ class PolymarketHourlyTradingBot:
                 )
                 self.logger.info(f"Removed {len(removed_orders)} orders")
                 self.logger.info(f"Failed to cancel {len(failed_to_cancel)} orders")
-                # Remove from our tracking
+                
+                # Update status of cancelled orders
                 for order_id in removed_orders:
-                    if order_id in self.state.orders_placed:
-                        self.state.orders_placed.remove(order_id)
+                    if order_id in self.state.active_orders:
+                        self.state.active_orders[order_id].status = "CANCELLED"
 
         except Exception as e:
             self.logger.error(f"Error cancelling expired orders: {e}")
 
-    async def assess_open_positions(self):
-        """Assess open positions analysis"""
-        all_positions = self.polymarket.get_positions()
-
-        # filter all_positions to include only positions relating to the current crypto market
-        current_market_slug = self.config.market_slug
-        all_positions = [
-            position
-            for position in all_positions
-            if current_market_slug in position.slug
-        ]
+    async def check_new_positions(self):
+        """Check for new positions from filled orders"""
+        try:
+            # Get current positions from Polymarket
+            current_positions = self.polymarket.get_positions_by_fuzzy_slug(self.config.market_slug)
+            
+            if current_positions:
+                for position in current_positions:
+                    if position.size > 0 and position.market_id not in self.state.open_positions:
+                        # Check if we have a completed order for this position
+                        corresponding_order = None
+                        for order_tracker in self.state.completed_orders.values():
+                            if (order_tracker.token_id == position.market_id and 
+                                order_tracker.status == "FILLED"):
+                                corresponding_order = order_tracker
+                                break
+                        
+                        # Create position tracker
+                        position_tracker = PositionTracker(
+                            market_id=position.market_id,
+                            market_slug=position.slug,
+                            token_id=position.market_id,
+                            token_outcome=self._get_token_outcome(
+                                self._find_market_by_token_id(position.market_id),
+                                position.market_id
+                            ) if self._find_market_by_token_id(position.market_id) else "Unknown",
+                            position_size=position.size,
+                            avg_entry_price=position.entry_price,
+                            current_price=position.current_price or position.entry_price,
+                            entry_time=position.last_updated or datetime.now(timezone.utc),
+                            predicted_direction=corresponding_order.predicted_direction if corresponding_order else "unknown",
+                            confidence=corresponding_order.confidence if corresponding_order else 0.0,
+                            market_close_time=self._get_market_close_time(position.slug),
+                        )
+                        
+                        position_tracker.update_current_price(position.current_price or position.entry_price)
+                        self.state.open_positions[position.market_id] = position_tracker
+                        
+                        self.logger.info(f"New position detected: {position.slug} - Size: {position.size}")
+            
+        except Exception as e:
+            self.logger.error(f"Error checking new positions: {e}")
 
     async def track_resolved_positions(self):
         """Track resolved positions for P&L analysis"""
@@ -678,7 +901,7 @@ class PolymarketHourlyTradingBot:
         positions_to_resolve = []
 
         try:
-            for order_id, position in self.state.open_positions.items():
+            for market_id, position in self.state.open_positions.items():
                 # Check if market should be resolved (closed + some buffer time)
                 if current_time > position.market_close_time + timedelta(minutes=5):
                     positions_to_resolve.append(position)
@@ -718,7 +941,7 @@ class PolymarketHourlyTradingBot:
                     )
 
                     # Remove from open positions
-                    del self.state.open_positions[position.order_id]
+                    del self.state.open_positions[position.market_id]
 
         except Exception as e:
             self.logger.error(f"Error tracking resolved positions: {e}")
@@ -762,26 +985,25 @@ class PolymarketHourlyTradingBot:
             # Check if prediction was correct
             prediction_correct = position.predicted_direction == actual_direction
 
-            # Calculate P&L
+            # Calculate P&L based on actual position
             if prediction_correct:
-                # Won the bet - get back entry cost plus winnings
-                pnl = position.position_size - (
-                    position.position_size * position.entry_price
-                )
+                # Won the bet - position now worth $1 per share
+                pnl = position.position_size * (1.0 - position.avg_entry_price)
                 final_outcome = "win"
             else:
-                # Lost the bet - lose the entry cost
-                pnl = -(position.position_size * position.entry_price)
+                # Lost the bet - position now worth $0 per share
+                pnl = position.position_size * (0.0 - position.avg_entry_price)
                 final_outcome = "loss"
 
             # Create resolved position
             resolved_position = PositionTracker(
-                order_id=position.order_id,
+                market_id=position.market_id,
                 market_slug=position.market_slug,
                 token_id=position.token_id,
                 token_outcome=position.token_outcome,
-                entry_price=position.entry_price,
                 position_size=position.position_size,
+                avg_entry_price=position.avg_entry_price,
+                current_price=1.0 if prediction_correct else 0.0,
                 entry_time=position.entry_time,
                 predicted_direction=position.predicted_direction,
                 confidence=position.confidence,
@@ -795,7 +1017,7 @@ class PolymarketHourlyTradingBot:
             return resolved_position
 
         except Exception as e:
-            self.logger.error(f"Error resolving position {position.order_id}: {e}")
+            self.logger.error(f"Error resolving position {position.market_id}: {e}")
             return None
 
     def get_performance_summary(self) -> Dict:
@@ -817,21 +1039,32 @@ class PolymarketHourlyTradingBot:
             "win_rate": win_rate,
             "total_pnl": self.state.total_pnl,
             "daily_pnl": self.state.daily_pnl,
+            "total_unrealized_pnl": self.state.total_unrealized_pnl,
             "average_pnl_per_trade": avg_pnl,
             "open_positions": len(self.state.open_positions),
+            "active_orders": len(self.state.active_orders),
+            "completed_orders": len(self.state.completed_orders),
         }
 
-    def log_daily_summary(self):
-        """Log daily performance summary"""
+    def log_performance_summary(self):
+        """Log current performance summary"""
         summary = self.get_performance_summary()
-        self.logger.info("=== Daily Performance Summary ===")
+        self.logger.info("=== Performance Summary ===")
         self.logger.info(f"Total Trades: {summary['total_trades']}")
         self.logger.info(f"Win Rate: {summary['win_rate']:.1%}")
         self.logger.info(f"Daily P&L: ${summary['daily_pnl']:.2f}")
         self.logger.info(f"Total P&L: ${summary['total_pnl']:.2f}")
+        self.logger.info(f"Unrealized P&L: ${summary['total_unrealized_pnl']:.2f}")
         self.logger.info(f"Avg P&L per Trade: ${summary['average_pnl_per_trade']:.2f}")
         self.logger.info(f"Open Positions: {summary['open_positions']}")
-        self.logger.info("================================")
+        self.logger.info(f"Active Orders: {summary['active_orders']}")
+        self.logger.info(f"Completed Orders: {summary['completed_orders']}")
+        self.logger.info("===========================")
+
+    def log_daily_summary(self):
+        """Log daily performance summary"""
+        self.log_performance_summary()
+        self.logger.info("=== End of Day Summary ===")
 
     def save_position_data(self):
         """Save position tracking data to JSON file"""
@@ -846,6 +1079,12 @@ class PolymarketHourlyTradingBot:
                 ],
                 "open_positions": [
                     pos.to_dict() for pos in self.state.open_positions.values()
+                ],
+                "active_orders": [
+                    order.to_dict() for order in self.state.active_orders.values()
+                ],
+                "completed_orders": [
+                    order.to_dict() for order in self.state.completed_orders.values()
                 ],
                 "performance_summary": self.get_performance_summary(),
             }
@@ -940,41 +1179,35 @@ class PolymarketHourlyTradingBot:
                 # Run trading cycle
                 await self.run_trading_cycle()
 
+                # Update order and position status
+                await self.update_order_status()
+                await self.update_position_status()
+                await self.check_new_positions()
+
                 # Cancel expired orders
                 await self.cancel_expired_orders()
 
-                # await self.assess_open_positions()
-
                 # Track resolved positions
-                try:
-                    await self.track_resolved_positions()
+                await self.track_resolved_positions()
 
-                    # Refresh markets every hour
-                    current_time = datetime.now(timezone.utc)
-                    if current_time.minute == 0:
-                        await self.refresh_markets()
+                # Refresh markets every hour
+                current_time = datetime.now(timezone.utc)
+                if current_time.minute == 0:
+                    await self.refresh_markets()
 
-                        # Log performance summary every 6 hours
-                        if current_time.hour % 1 == 0:
-                            summary = self.get_performance_summary()
-                            self.logger.info(
-                                f"Performance Update: {summary['total_trades']} trades, "
-                                f"{summary['win_rate']:.1%} win rate, "
-                                f"${summary['daily_pnl']:.2f} daily P&L"
-                            )
+                    # Log performance summary every hour
+                    if current_time.hour % 1 == 0:
+                        self.log_performance_summary()
 
-                    # Reset daily counter at midnight UTC
-                    if current_time.hour == 0 and current_time.minute == 0:
-                        self.log_daily_summary()
-                        self.save_position_data()
-                        self.state.daily_trade_count = 0
-                        self.state.daily_pnl = 0.0
-                        self.logger.info("Reset daily counters")
+                # Reset daily counter at midnight UTC
+                if current_time.hour == 0 and current_time.minute == 0:
+                    self.log_daily_summary()
+                    self.save_position_data()
+                    self.state.daily_trade_count = 0
+                    self.state.daily_pnl = 0.0
+                    self.logger.info("Reset daily counters")
 
-                # Sleep for 1 minute
-                except Exception as e:
-                    self.logger.error(f"Error tracking resolved positions: {e}")
-
+                # Sleep for configured interval
                 await asyncio.sleep(self.config.data_refresh_interval)
 
             except KeyboardInterrupt:
