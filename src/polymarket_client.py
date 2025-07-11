@@ -719,6 +719,34 @@ class PolymarketClient:
         ]
         self.logger.info(f"Found {len(positions)} positions")
         return positions
+    
+    def get_positions_by_market_slug(self, market_slug: str) -> list[Position]:
+        """
+        Get positions by market slug.
+        :param market_slug: The slug of the market to get positions for.
+        :return: List of positions.
+        """
+        self.logger.info(f"Getting positions by market slug: {market_slug}")
+        positions = self.get_positions()
+        return [position for position in positions if position.slug == market_slug]
+    
+    def get_positions_by_market_id(self, market_id: str) -> list[Position]:
+        """
+        Get positions by market ID.
+        :param market_id: The ID of the market to get positions for.
+        :return: List of positions.
+        """
+        self.logger.info(f"Getting positions by market ID: {market_id}")
+    
+    def get_positions_by_fuzzy_slug(self, fuzzy_slug: str) -> Position | None:
+        """
+        Get position by fuzzy slug.
+        :param fuzzy_slug: The fuzzy slug of the market to get position for.
+        :return: The position.
+        """
+        self.logger.info(f"Getting position by fuzzy slug: {fuzzy_slug}")
+        positions = self.get_positions()
+        return [position for position in positions if fuzzy_slug in position.slug]
 
 
 if __name__ == "__main__":
