@@ -657,18 +657,6 @@ class PolymarketHourlyTradingBot:
         except Exception as e:
             self.logger.error(f"Error cancelling expired orders: {e}")
 
-    async def assess_open_positions(self):
-        """Assess open positions analysis"""
-        all_positions = self.polymarket.get_positions()
-
-        # filter all_positions to include only positions relating to the current crypto market
-        current_market_slug = self.config.market_slug
-        all_positions = [
-            position
-            for position in all_positions
-            if current_market_slug in position.slug
-        ]
-
     async def track_resolved_positions(self):
         """Track resolved positions for P&L analysis"""
         if not self.state.open_positions:
@@ -942,8 +930,6 @@ class PolymarketHourlyTradingBot:
 
                 # Cancel expired orders
                 await self.cancel_expired_orders()
-
-                # await self.assess_open_positions()
 
                 # Track resolved positions
                 try:
