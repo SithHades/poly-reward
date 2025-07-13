@@ -658,18 +658,18 @@ class PolymarketHourlyTradingBot:
                 return {}
 
             # Get best bid and ask
-            best_bid = float(order_book.bids[0][0]) if order_book.bids else 0.0
-            best_ask = float(order_book.asks[0][0]) if order_book.asks else 1.0
+            best_bid = float(order_book.bids[0].price) if order_book.bids else 0.0
+            best_ask = float(order_book.asks[0].price) if order_book.asks else 1.0
 
             # Calculate midpoint
             midpoint = (best_bid + best_ask) / 2
 
             # Calculate total liquidity
             bid_liquidity = sum(
-                float(price) * float(size) for price, size in order_book.bids[:5]
+                float(bid.price) * float(bid.size) for bid in order_book.bids
             ) if order_book.bids else 0.0
             ask_liquidity = sum(
-                float(price) * float(size) for price, size in order_book.asks[:5]
+                float(ask.price) * float(ask.size) for ask in order_book.asks
             ) if order_book.asks else 0.0
 
             return {
