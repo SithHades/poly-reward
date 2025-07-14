@@ -159,8 +159,9 @@ class PolymarketOrderbookCollector:
 
     def process_orderbook(self, data, market_slug):
         """Process full orderbook data"""
-        timestamp = int(data['timestamp']) / 1000  # Convert ms to seconds
-        dt = datetime.fromtimestamp(timestamp, UTC).strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_ms = int(data['timestamp'])
+        timestamp_s = timestamp_ms / 1000  # Convert ms to seconds
+        dt = datetime.fromtimestamp(timestamp_s, UTC).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]  # Keep millisecond precision
         asset_id = data.get('asset_id')
         
         for bid in data.get('bids', []):
@@ -186,8 +187,9 @@ class PolymarketOrderbookCollector:
 
     def process_price_change(self, data, market_slug):
         """Process price change updates"""
-        timestamp = int(data['timestamp']) / 1000  # Convert ms to seconds
-        dt = datetime.fromtimestamp(timestamp, UTC).strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_ms = int(data['timestamp'])
+        timestamp_s = timestamp_ms / 1000  # Convert ms to seconds
+        dt = datetime.fromtimestamp(timestamp_s, UTC).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]  # Keep millisecond precision
         asset_id = data.get('asset_id')
         
         for change in data.get('changes', []):
