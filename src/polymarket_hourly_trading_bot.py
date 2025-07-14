@@ -349,6 +349,7 @@ class PolymarketHourlyTradingBot:
             if actual_positions:
                 for position in actual_positions:
                     if position.size > 0:  # Only track positions with actual size
+                        # NOTE: position.market_id is actually the token_id (populated from API's 'asset' field)
                         # Try to find corresponding market info
                         market = self._find_market_by_token_id(position.market_id)
                         if not market:
@@ -357,7 +358,7 @@ class PolymarketHourlyTradingBot:
                         
                         # Create position tracker
                         position_tracker = PositionTracker(
-                            market_id=position.market_id,
+                            market_id=market.condition_id,
                             market_slug=position.slug,
                             token_id=position.market_id,
                             token_outcome=self._get_token_outcome(market, position.market_id),
@@ -858,6 +859,7 @@ class PolymarketHourlyTradingBot:
             if current_positions:
                 for position in current_positions:
                     if position.size > 0 and position.market_id not in self.state.open_positions:
+                        # NOTE: position.market_id is actually the token_id (populated from API's 'asset' field)
                         # Check if we have a completed order for this position
                         corresponding_order = None
                         for order_tracker in self.state.completed_orders.values():
@@ -868,9 +870,9 @@ class PolymarketHourlyTradingBot:
                         
                         # Create position tracker
                         position_tracker = PositionTracker(
-                            market_id=position.market_id,
+                            market_id=self._find_market_by_token_id(position.market_id).condition_id if self._find_market_by_token_id(position.market_id) else "unknown",
                             market_slug=position.slug,
-                            token_id=position.market_id,
+                            token_id=position.market_id,  # position.market_id is actually token_id
                             token_outcome=self._get_token_outcome(
                                 self._find_market_by_token_id(position.market_id),
                                 position.market_id
