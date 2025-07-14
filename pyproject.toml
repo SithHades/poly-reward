@@ -25,4 +25,5 @@ dependencies = [
     # Additional async and utility packages
     "asyncio>=3.4.3",
     "requests>=2.31.0",
+    "websockets>=15.0.1",
 ]
