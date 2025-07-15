@@ -6,10 +6,11 @@ import time
 from datetime import datetime, UTC, timedelta
 import os
 import logging
-from websockets import connect
+from websockets import connect, ConnectionClosed, WebSocketException
 import sys
 import hashlib
 from typing import Dict, Set, List, Optional
+from enum import Enum
 
 # Add src to path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -37,6 +38,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+class ConnectionState(Enum):
+    DISCONNECTED = "disconnected"
+    CONNECTING = "connecting"
+    CONNECTED = "connected"
+    RECONNECTING = "reconnecting"
+
 class PolymarketOrderbookCollector:
     def __init__(self, output_dir="orderbook_data"):
         self.ws_url = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
@@ -46,9 +53,28 @@ class PolymarketOrderbookCollector:
         self.save_interval = 300  # Save every 5 minutes
         self.client = PolymarketClient()
         
+        # Connection state management
+        self.connection_state = ConnectionState.DISCONNECTED
+        self.reconnect_attempts = 0
+        self.max_reconnect_attempts = 10
+        self.base_reconnect_delay = 5  # seconds
+        self.max_reconnect_delay = 300  # 5 minutes
+        
+        # Market monitoring timing
+        self.market_check_interval = 30  # Check markets every 30 seconds
+        self.last_market_check = 0
+        self.market_transition_threshold = 300  # 5 minutes before market expires
+        
+        # WebSocket health monitoring
+        self.last_message_time = 0
+        self.websocket_timeout = 120  # 2 minutes without messages triggers reconnection
+        self.ping_interval = 60  # Send ping every minute
+        self.last_ping_time = 0
+        
         # Market tracking for all crypto types
         self.current_markets = {}  # slug -> {market_id, asset_ids, start_time, end_time, crypto}
         self.monitored_asset_ids = set()
+        self.previous_asset_ids = set()  # Track changes in monitored assets
         
         # Storage optimization: mapping long identifiers to short ones
         self.asset_id_mapping = {}  # asset_id -> short_id
@@ -177,10 +203,9 @@ class PolymarketOrderbookCollector:
     async def setup_market_monitoring(self):
         """Setup monitoring for relevant markets across all crypto types"""
         markets_by_crypto = self.get_markets_to_monitor()
+        markets_changed = False
         
         for crypto, market_slugs in markets_by_crypto.items():
-            logger.info(f"Setting up monitoring for {crypto} markets: {market_slugs}")
-            
             for slug in market_slugs:
                 if slug not in self.current_markets:
                     try:
@@ -199,16 +224,20 @@ class PolymarketOrderbookCollector:
                                 'crypto': crypto
                             }
                             self.monitored_asset_ids.update(asset_ids)
+                            markets_changed = True
                             logger.info(f"Added {crypto} market {slug} with assets {asset_ids}")
                         else:
                             logger.warning(f"Could not find market data for {crypto} slug: {slug}")
                     except Exception as e:
                         logger.error(f"Error setting up {crypto} market {slug}: {str(e)}")
+        
+        return markets_changed
 
     def clean_expired_markets(self):
         """Remove markets that are no longer in monitoring window"""
         current_time = datetime.now(ET)
         expired_markets = []
+        markets_changed = False
         
         for slug, market_info in self.current_markets.items():
             if current_time > market_info['end_time']:
@@ -216,14 +245,98 @@ class PolymarketOrderbookCollector:
                 # Remove asset_ids from monitored set
                 for asset_id in market_info['asset_ids']:
                     self.monitored_asset_ids.discard(asset_id)
+                markets_changed = True
         
         for slug in expired_markets:
             crypto = self.current_markets[slug]['crypto']
             del self.current_markets[slug]
             logger.info(f"Removed expired {crypto} market: {slug}")
+        
+        return markets_changed
+
+    def check_market_transitions(self):
+        """Check if any markets are about to expire and need proactive reconnection"""
+        current_time = datetime.now(ET)
+        transition_needed = False
+        
+        for slug, market_info in self.current_markets.items():
+            time_to_expiry = (market_info['end_time'] - current_time).total_seconds()
+            if 0 < time_to_expiry < self.market_transition_threshold:
+                logger.info(f"Market {slug} ({market_info['crypto']}) expires in {time_to_expiry:.0f} seconds")
+                transition_needed = True
+        
+        return transition_needed
+
+    def get_reconnect_delay(self):
+        """Calculate exponential backoff delay for reconnection"""
+        if self.reconnect_attempts == 0:
+            return 0
+        
+        delay = min(
+            self.base_reconnect_delay * (2 ** (self.reconnect_attempts - 1)),
+            self.max_reconnect_delay
+        )
+        return delay
+
+    def reset_reconnect_attempts(self):
+        """Reset reconnection attempts after successful connection"""
+        self.reconnect_attempts = 0
+
+    async def check_markets_and_reconnect_if_needed(self, websocket):
+        """Check markets and determine if reconnection is needed"""
+        current_time = time.time()
+        
+        # Check if it's time to check markets
+        if current_time - self.last_market_check < self.market_check_interval:
+            return False
+            
+        self.last_market_check = current_time
+        
+        # Clean expired markets and setup new ones
+        expired_changed = self.clean_expired_markets()
+        new_changed = await self.setup_market_monitoring()
+        
+        # Check if monitored assets have changed
+        current_asset_ids = set(self.monitored_asset_ids)
+        assets_changed = current_asset_ids != self.previous_asset_ids
+        
+        # Check if we're approaching market transitions
+        transition_needed = self.check_market_transitions()
+        
+        if expired_changed or new_changed or assets_changed or transition_needed:
+            logger.info("Market changes detected, reconnection needed")
+            logger.info(f"  Expired markets: {expired_changed}")
+            logger.info(f"  New markets: {new_changed}")
+            logger.info(f"  Assets changed: {assets_changed}")
+            logger.info(f"  Transition needed: {transition_needed}")
+            return True
+            
+        return False
+
+    async def send_ping(self, websocket):
+        """Send ping to keep connection alive"""
+        current_time = time.time()
+        if current_time - self.last_ping_time > self.ping_interval:
+            try:
+                await websocket.ping()
+                self.last_ping_time = current_time
+                logger.debug("Sent WebSocket ping")
+            except Exception as e:
+                logger.error(f"Error sending ping: {e}")
+                raise
+
+    def check_connection_health(self):
+        """Check if connection is healthy based on last message time"""
+        current_time = time.time()
+        if self.last_message_time > 0 and current_time - self.last_message_time > self.websocket_timeout:
+            logger.warning(f"No messages received for {current_time - self.last_message_time:.0f} seconds")
+            return False
+        return True
 
     def process_websocket_message(self, message_data):
         """Process websocket message which contains an array of updates"""
+        self.last_message_time = time.time()
+        
         if not isinstance(message_data, list):
             logger.warning("Expected array in websocket message")
             return
@@ -359,10 +472,22 @@ class PolymarketOrderbookCollector:
         self.orderbook_data = []  # Clear data after saving
 
     async def websocket_listener(self):
-        """Listen for WebSocket updates with reconnection logic"""
+        """Listen for WebSocket updates with robust reconnection logic"""
         while True:
             try:
-                async with connect(self.ws_url) as websocket:
+                self.connection_state = ConnectionState.CONNECTING
+                logger.info(f"Connecting to WebSocket (attempt {self.reconnect_attempts + 1})")
+                
+                async with connect(
+                    self.ws_url,
+                    ping_interval=None,  # We'll handle pings manually
+                    ping_timeout=20,
+                    close_timeout=10,
+                ) as websocket:
+                    self.connection_state = ConnectionState.CONNECTED
+                    logger.info("WebSocket connected successfully")
+                    self.reset_reconnect_attempts()
+                    
                     # Setup monitoring and subscribe to all relevant asset_ids
                     await self.setup_market_monitoring()
                     
@@ -373,6 +498,8 @@ class PolymarketOrderbookCollector:
                         
                     # Subscribe to all monitored asset_ids
                     asset_ids_list = list(self.monitored_asset_ids)
+                    self.previous_asset_ids = set(asset_ids_list)
+                    
                     subscription_msg = {
                         "type": "MARKET", 
                         "assets_ids": asset_ids_list
@@ -389,33 +516,40 @@ class PolymarketOrderbookCollector:
                     for crypto, count in crypto_counts.items():
                         logger.info(f"  {crypto}: {count} assets")
                     
-                    message_count = 0
+                    # Initialize timing
+                    self.last_message_time = time.time()
+                    self.last_ping_time = time.time()
+                    
+                    # Main message processing loop
                     while True:
                         try:
-                            message = await websocket.recv()
-                            message_data = json.loads(message)
-                            message_count += 1
+                            # Check if we need to reconnect due to market changes
+                            if await self.check_markets_and_reconnect_if_needed(websocket):
+                                logger.info("Reconnecting due to market changes...")
+                                break
                             
-                            # Process the message (array of updates)
-                            self.process_websocket_message(message_data)
+                            # Check connection health
+                            if not self.check_connection_health():
+                                logger.warning("Connection appears unhealthy, reconnecting...")
+                                break
                             
-                            # Periodic maintenance
-                            if message_count % 100 == 0:
-                                self.clean_expired_markets()
-                                # Re-setup monitoring in case new markets need to be added
-                                await self.setup_market_monitoring()
+                            # Send ping if needed
+                            await self.send_ping(websocket)
+                            
+                            # Try to receive a message with timeout
+                            try:
+                                message = await asyncio.wait_for(websocket.recv(), timeout=1.0)
+                                message_data = json.loads(message)
                                 
-                                # Update subscription if monitored assets changed
-                                current_asset_ids = list(self.monitored_asset_ids)
-                                if set(current_asset_ids) != set(asset_ids_list):
-                                    asset_ids_list = current_asset_ids
-                                    if asset_ids_list:
-                                        subscription_msg = {
-                                            "type": "MARKET", 
-                                            "assets_ids": asset_ids_list
-                                        }
-                                        await websocket.send(json.dumps(subscription_msg))
-                                        logger.info(f"Updated subscription to {len(asset_ids_list)} asset_ids")
+                                # Process the message (array of updates)
+                                self.process_websocket_message(message_data)
+                                
+                            except asyncio.TimeoutError:
+                                # No message received, continue to next iteration
+                                continue
+                            except json.JSONDecodeError as e:
+                                logger.error(f"JSON decode error: {str(e)}")
+                                continue
                             
                             # Save periodically
                             current_time = time.time()
@@ -423,113 +557,52 @@ class PolymarketOrderbookCollector:
                                 self.save_data()
                                 self.last_save_time = current_time
                                 
-                        except json.JSONDecodeError as e:
-                            logger.error(f"JSON decode error: {str(e)}")
-                            continue
+                        except ConnectionClosed as e:
+                            logger.warning(f"WebSocket connection closed: {e}")
+                            break
+                        except WebSocketException as e:
+                            logger.error(f"WebSocket error: {e}")
+                            break
                         except Exception as e:
-                            logger.error(f"Error processing message: {str(e)}")
+                            logger.error(f"Error in message processing loop: {str(e)}")
+                            # Continue processing unless it's a connection error
+                            if "connection" in str(e).lower() or "close" in str(e).lower():
+                                break
                             continue
                         
-            except Exception as e:
+            except ConnectionClosed as e:
+                logger.warning(f"WebSocket connection closed during connect: {e}")
+            except WebSocketException as e:
                 logger.error(f"WebSocket connection error: {str(e)}")
-                await asyncio.sleep(5)  # Wait before reconnecting
+            except Exception as e:
+                logger.error(f"Unexpected error in WebSocket listener: {str(e)}")
             except KeyboardInterrupt:
                 logger.info("Stopping...")
                 self.save_data()
                 break
-
-    async def run(self):
-        """Main run method - monitors all market types simultaneously"""
-        logger.info("Starting orderbook collector for all market types (ethereum, bitcoin, solana, xrp)")
-        logger.info("Storage optimization: Using short identifiers for asset_ids and slugs")
-        logger.info("Initial orderbook will be obtained from first websocket message")
-        await self.websocket_listener()            
-
-    async def websocket_listener(self):
-        """Listen for WebSocket updates with reconnection logic"""
-        while True:
-            try:
-                async with connect(self.ws_url) as websocket:
-                    # Setup monitoring and subscribe to all relevant asset_ids
-                    await self.setup_market_monitoring()
-                    
-                    if not self.monitored_asset_ids:
-                        logger.info("No markets to monitor at this time, waiting...")
-                        await asyncio.sleep(60)  # Wait 1 minute before checking again
-                        continue
-                        
-                    # Subscribe to all monitored asset_ids
-                    asset_ids_list = list(self.monitored_asset_ids)
-                    subscription_msg = {
-                        "type": "MARKET", 
-                        "assets_ids": asset_ids_list
-                    }
-                    await websocket.send(json.dumps(subscription_msg))
-                    
-                    # Log subscription by crypto type
-                    crypto_counts = {}
-                    for slug, market_info in self.current_markets.items():
-                        crypto = market_info['crypto']
-                        crypto_counts[crypto] = crypto_counts.get(crypto, 0) + len(market_info['asset_ids'])
-                    
-                    logger.info(f"Subscribed to {len(asset_ids_list)} asset_ids across all markets:")
-                    for crypto, count in crypto_counts.items():
-                        logger.info(f"  {crypto}: {count} assets")
-                    
-                    message_count = 0
-                    while True:
-                        try:
-                            message = await websocket.recv()
-                            message_data = json.loads(message)
-                            message_count += 1
-                            
-                            # Process the message (array of updates)
-                            self.process_websocket_message(message_data)
-                            
-                            # Periodic maintenance
-                            if message_count % 100 == 0:
-                                self.clean_expired_markets()
-                                # Re-setup monitoring in case new markets need to be added
-                                await self.setup_market_monitoring()
-                                
-                                # Update subscription if monitored assets changed
-                                current_asset_ids = list(self.monitored_asset_ids)
-                                if set(current_asset_ids) != set(asset_ids_list):
-                                    asset_ids_list = current_asset_ids
-                                    if asset_ids_list:
-                                        subscription_msg = {
-                                            "type": "MARKET", 
-                                            "assets_ids": asset_ids_list
-                                        }
-                                        await websocket.send(json.dumps(subscription_msg))
-                                        logger.info(f"Updated subscription to {len(asset_ids_list)} asset_ids")
-                            
-                            # Save periodically
-                            current_time = time.time()
-                            if current_time - self.last_save_time >= self.save_interval:
-                                self.save_data()
-                                self.last_save_time = current_time
-                                
-                        except json.JSONDecodeError as e:
-                            logger.error(f"JSON decode error: {str(e)}")
-                            continue
-                        except Exception as e:
-                            logger.error(f"Error processing message: {str(e)}")
-                            continue
-                        
-            except Exception as e:
-                logger.error(f"WebSocket connection error: {str(e)}")
-                await asyncio.sleep(5)  # Wait before reconnecting
-            except KeyboardInterrupt:
-                logger.info("Stopping...")
-                self.save_data()
+            
+            # Connection lost, prepare for reconnection
+            self.connection_state = ConnectionState.RECONNECTING
+            self.reconnect_attempts += 1
+            
+            if self.reconnect_attempts > self.max_reconnect_attempts:
+                logger.error(f"Max reconnection attempts ({self.max_reconnect_attempts}) reached")
                 break
+            
+            delay = self.get_reconnect_delay()
+            logger.info(f"Reconnecting in {delay} seconds (attempt {self.reconnect_attempts})")
+            await asyncio.sleep(delay)
 
     async def run(self):
         """Main run method - monitors all market types simultaneously"""
-        logger.info("Starting orderbook collector for all market types (ethereum, bitcoin, solana, xrp)")
-        logger.info("Storage optimization: Using short identifiers for asset_ids and slugs")
-        logger.info("Initial orderbook will be obtained from first websocket message")
+        logger.info("Starting robust orderbook collector for all market types (ethereum, bitcoin, solana, xrp)")
+        logger.info("Enhanced features:")
+        logger.info("  - Time-based market monitoring (every 30 seconds)")
+        logger.info("  - Proactive reconnection before market transitions")
+        logger.info("  - Connection health monitoring with ping/pong")
+        logger.info("  - Exponential backoff for reconnections")
+        logger.info("  - Storage optimization with short identifiers")
+        
         await self.websocket_listener()
 
 async def main():
