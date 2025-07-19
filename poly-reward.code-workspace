@@ -9,7 +9,10 @@
       "**/__pycache__": true,
       "**/.venv": true,
       "**/.env": true,
-      "**/.ipynb_checkpoints": true
+      "**/.ipynb_checkpoints": true,
+      "**/.ruff_cache": true,
+      "**/.pytest_cache": true,
+      "**/.mypy_cache": true,
     },
     "search.exclude": {
       "**/__pycache__": true,
