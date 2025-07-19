@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone, timedelta
 import logging
-from src.models import (
+from src.core.models import (
     BookSide,
     MarketCondition,
     OrderDetails,

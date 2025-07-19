@@ -8,7 +8,7 @@ from src.order_manager import (
     OrderMetrics,
     OrderLifecycleEvent,
 )
-from src.models import Order, Position, OrderSide, OrderStatus
+from src.core.models import Order, Position, OrderSide, OrderStatus
 from src.polymarket_client import PolymarketClient
 from src.strategy import (
     PolymarketLiquidityStrategy,

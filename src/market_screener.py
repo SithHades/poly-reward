@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple, Any
 import logging
 
-from src.models import Market, OrderbookSnapshot, OrderbookLevel, Token, MarketCondition
+from src.core.models import Market, OrderbookSnapshot, OrderbookLevel, Token, MarketCondition
 from src.polymarket_client import PolymarketClient
 from src.strategy_base import BaseStrategy
 

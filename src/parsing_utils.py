@@ -1,7 +1,7 @@
 import re
 from typing import Literal, Optional
-from src.constants import MARKETS
-from src.models import Market, Rewards, SimplifiedMarket, TokenInfo
+from src.core.constants import MARKETS
+from src.core.models import Market, Rewards, SimplifiedMarket, TokenInfo
 from dateutil import tz
 from dateutil.parser import parse as parse_date
 from datetime import datetime, timedelta, tzinfo

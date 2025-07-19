@@ -1,6 +1,6 @@
 import pytest
 from datetime import datetime, timezone
-from src.models import Market, Order, Position, OrderSide, OrderStatus
+from src.core.models import Market, Order, Position, OrderSide, OrderStatus
 
 
 class TestMarket:

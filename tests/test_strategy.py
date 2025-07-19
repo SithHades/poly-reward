@@ -8,7 +8,7 @@ from src.strategy import (
     VolatilityMetrics,
     MarketCondition,
 )
-from src.models import Order, Position, OrderSide, OrderStatus
+from src.core.models import Order, Position, OrderSide, OrderStatus
 
 
 class TestOrderbookSnapshot:

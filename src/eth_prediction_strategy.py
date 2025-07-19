@@ -7,7 +7,7 @@ import ccxt
 from datetime import datetime, timezone, timedelta
 import re
 
-from src.models import (
+from src.core.models import (
     BookSide,
     MarketCondition,
     OrderDetails,

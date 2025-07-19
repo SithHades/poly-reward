@@ -25,7 +25,7 @@ from src.parsing_utils import (
     ET
 )
 from src.polymarket_client import PolymarketClient
-from src.constants import MARKETS
+from src.core.constants import MARKETS
 
 # Configure logging
 logging.basicConfig(

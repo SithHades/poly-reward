@@ -1,4 +1,4 @@
-from src.models import OrderbookSnapshot
+from src.core.models import OrderbookSnapshot
 
 
 def find_arbitrage_opportunities(

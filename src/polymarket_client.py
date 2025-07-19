@@ -26,8 +26,8 @@ from src.parsing_utils import (
     map_market,
     map_simplified_market,
 )
-from src.constants import DEFAULT_MIDPOINT, DEFAULT_SPREAD, DEFAULT_TICK_SIZE
-from src.models import (
+from src.core.constants import DEFAULT_MIDPOINT, DEFAULT_SPREAD, DEFAULT_TICK_SIZE
+from src.core.models import (
     BookSide,
     Market,
     Midpoint,

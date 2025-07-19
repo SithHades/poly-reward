@@ -154,59 +154,49 @@ def create_resampled_data(df_1min: pd.DataFrame) -> dict[str, pd.DataFrame]:
     return {"1min": df_1min, "5min": df_5min, "15min": df_15min, "1h": df_1h}
 
 
-def analyze_historical_performance(df_1min: pd.DataFrame) -> pd.DataFrame:
-    """
-    Analyze historical candle flipping behavior (similar to your existing analysis).
-    """
-    logger.info("Analyzing historical candle behavior...")
-
-    # Resample to get hourly candles
-    df_1h = (
-        df_1min.resample("1H")
-        .agg(
-            {
-                "open": "first",
-                "high": "max",
-                "low": "min",
-                "close": "last",
-                "volume": "sum",
-            }
-        )
-        .dropna()
-    )
-
-    # Get 15-minute data for 45-minute marks
-    df_15m = (
-        df_1min.resample("15min")
-        .agg(
-            {
-                "open": "first",
-                "high": "max",
-                "low": "min",
-                "close": "last",
-                "volume": "sum",
-            }
-        )
-        .dropna()
-    )
-
+def analyze_historical_performance(df_15min: pd.DataFrame, df_1h: pd.DataFrame) -> pd.DataFrame:
+    """Analyze how often candles flip direction between 45min and close"""
     results = []
 
-    for ts in df_1h.index:
+    print("🔍 Analyzing candle flipping behavior...")
+
+    for i, ts in enumerate(df_1h.index):
+        if (len(df_1h) <= 1000 and i % 100 == 0) or (
+            len(df_1h) > 1000 and i % 1000 == 0
+        ):
+            print(f"   Processing candle {i + 1}/{len(df_1h)}")
+
         open_price = df_1h.loc[ts, "open"]
         close_price = df_1h.loc[ts, "close"]
 
-        # Find 45-min mark price (closest available)
-        ts_45 = ts + pd.Timedelta(minutes=45)
+        # Find 45-min mark price - this should be the CLOSE of the 3rd 15-min candle
+        # 15-min candles in an hour: [0-15], [15-30], [30-45], [45-60]
+        # We want the close price of the [30-45] candle, which ends at the 45-min mark
+        ts_30 = ts + pd.Timedelta(minutes=30)  # Start of 3rd 15-min candle
+        ts_45 = ts + pd.Timedelta(minutes=45)  # End of 3rd 15-min candle (45-min mark)
 
-        # Find closest timestamp in 15-min data
-        closest_idx = np.abs(df_15m.index - ts_45).argmin()
-        if np.abs(df_15m.index[closest_idx] - ts_45) <= pd.Timedelta(minutes=15):
-            price_45 = df_15m.iloc[closest_idx]["close"]
+        # Find the 15-min candle that starts at the 30-minute mark
+        # This candle closes at the 45-minute mark, giving us the price at 45 minutes
+        matching_candles = df_15min.index[
+            (df_15min.index >= ts_30) & (df_15min.index < ts_45)
+        ]
+
+        if len(matching_candles) > 0:
+            # Use the close price of this candle (which represents the price at 45-min mark)
+            price_45 = df_15min.loc[matching_candles[0], "close"]
         else:
-            continue  # Skip if no close enough data point
+            # Fallback: find all 15-min candles in the first 45 minutes and take the last one
+            first_45_candles = df_15min.index[
+                (df_15min.index >= ts) & (df_15min.index < ts_45)
+            ]
+            if len(first_45_candles) >= 3:
+                # Take the close of the 3rd candle (index 2) which should end at 45 minutes
+                price_45 = df_15min.loc[first_45_candles[2], "close"]
+            else:
+                # Skip this hour if we don't have enough data
+                continue
 
-        # Direction at 45m and at end
+        # Calculate changes
         delta_45 = price_45 - open_price
         delta_close = close_price - open_price
 
@@ -228,12 +218,13 @@ def analyze_historical_performance(df_1min: pd.DataFrame) -> pd.DataFrame:
                 "direction_close": direction_close,
                 "flipped": flipped,
                 "green_candle": close_price > open_price,
+                "hour_of_day": ts.hour,
+                "day_of_week": ts.day_name(),
             }
         )
 
-    flip_df = pd.DataFrame(results)
-
-    # Print some statistics
+    flip_df = pd.DataFrame(results)  
+     
     total_candles = len(flip_df)
     green_candles = flip_df["green_candle"].sum()
     red_candles = total_candles - green_candles
@@ -263,7 +254,7 @@ def analyze_historical_performance(df_1min: pd.DataFrame) -> pd.DataFrame:
             logger.info(
                 f"  Flip rate when down <-{threshold}% at 45min: {flip_rate_down:.1%} ({len(subset_down)} samples)"
             )
-
+    
     return flip_df
 
 
@@ -477,13 +468,18 @@ def main():
     logger.info("Starting ETH Candle Direction Prediction Demo")
 
     # 1. Fetch data
-    df_1min = fetch_eth_data(days=14)  # 2 weeks of data
+    df_1min = fetch_eth_data(days=50)  # 2 weeks of data
 
     # 2. Create resampled data
     resampled_data = create_resampled_data(df_1min)
 
+    df_15min = resampled_data["15min"]
+    df_1h = resampled_data["1h"]
+
     # 3. Analyze historical behavior
-    flip_df = analyze_historical_performance(df_1min)
+    flip_df = analyze_historical_performance(df_15min, df_1h)
+
+    return
 
     # 4. Train models
     logger.info("\n" + "=" * 50)

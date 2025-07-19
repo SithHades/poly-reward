@@ -22,7 +22,7 @@ import ccxt
 import pandas as pd
 from dataclasses import dataclass, field
 
-from src.constants import MARKETS, TICKERS
+from src.core.constants import MARKETS, TICKERS
 from src.parsing_utils import (
     ET,
     create_slug_from_datetime,
@@ -32,7 +32,7 @@ from src.parsing_utils import (
 )
 from src.eth_candle_predictor import EthCandlePredictor, PredictionResult
 from src.polymarket_client import PolymarketClient
-from src.models import Market, OrderArgsModel, BookSide, Position, OrderDetails
+from src.core.models import Market, OrderArgsModel, BookSide, Position, OrderDetails
 
 
 @dataclass

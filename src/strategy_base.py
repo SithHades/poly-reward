@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
-from src.models import OrderDetails, OrderbookSnapshot, Position
+from src.core.models import OrderDetails, OrderbookSnapshot, Position
 
 
 class BaseStrategy(ABC):

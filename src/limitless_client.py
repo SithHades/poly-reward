@@ -12,7 +12,7 @@ except ImportError:
         "eth_account is required for signing. Install with 'uv pip install eth-account'."
     )
 
-from src.models import (
+from src.core.models import (
     BookSide,
     Market,
     OrderArgsModel,

@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Any
 
-from src.constants import MARKETS
+from src.core.constants import MARKETS
 from src.polymarket_hourly_trading_bot import PolymarketHourlyTradingBot, TradingConfig
 from src.parsing_utils import (
     get_current_market_slug,

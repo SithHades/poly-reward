@@ -5,7 +5,7 @@ import logging
 import asyncio
 from enum import Enum
 
-from src.models import OrderDetails, OrderStatus, OrderArgsModel, BookSide
+from src.core.models import OrderDetails, OrderStatus, OrderArgsModel, BookSide
 
 from src.polymarket_client import PolymarketClient
 from src.strategy_base import BaseStrategy

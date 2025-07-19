@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from src.polymarket_client import PolymarketClient
 from src.market_screener import MarketScreener, ScreeningCriteria, MarketOpportunity
 from src.strategy import PolymarketLiquidityStrategy, LiquidityProvisionConfig
-from src.models import Position
+from src.core.models import Position
 
 
 def setup_logging():
@@ -184,7 +184,7 @@ def demo_risk_management():
     strategy = PolymarketLiquidityStrategy(config)
 
     # Simulate some orders for risk management demo
-    from src.models import Order, OrderSide, OrderStatus
+    from core.models import Order, OrderSide, OrderStatus
     from datetime import datetime, timezone, timedelta
 
     current_time = datetime.now(timezone.utc)
