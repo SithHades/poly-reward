@@ -5,6 +5,7 @@ This module provides utilities for processing and analyzing Polymarket orderbook
 collected from hourly prediction markets for crypto pairs (BTCUSDT, ETHUSDT, SOLUSDT, XRPUSDT).
 """
 
+from crypto_data_cache import DATA_TYPES, CryptoDataCache
 import polars as pl
 import json
 from pathlib import Path
@@ -25,6 +26,10 @@ class PolymarketDataProcessor:
         # Load mappings
         self.asset_mappings = self._load_asset_mappings()
         self.slug_mappings = self._load_slug_mappings()
+        
+        # Cache for loaded data to avoid reloading
+        self._cached_orderbook_data = None
+        self._orderbook_time_range = None
     
     def _load_asset_mappings(self) -> Dict[str, str]:
         """Load asset ID mappings from the mapping file."""
@@ -42,8 +47,39 @@ class PolymarketDataProcessor:
         # We'll work with short identifiers for now
         return {}
     
+    def _determine_klines_date_range(self, buffer_hours: int = 2) -> Tuple[datetime, datetime]:
+        """
+        Determine the optimal date range for KLINES data based on orderbook data.
+        
+        Args:
+            buffer_hours: Hours to add before/after orderbook range for better analysis
+        
+        Returns:
+            Tuple of (start_date, end_date) for KLINES data
+        """
+        if self._orderbook_time_range is None:
+            # Load orderbook data if not already cached
+            if self._cached_orderbook_data is None:
+                self._cached_orderbook_data = self.load_orderbook_data()
+            
+            # Get time range from orderbook data
+            min_time = self._cached_orderbook_data['timestamp'].min()
+            max_time = self._cached_orderbook_data['timestamp'].max()
+            
+            # Add buffer time for better correlation analysis
+            start_date = min_time - timedelta(hours=buffer_hours)
+            end_date = max_time + timedelta(hours=buffer_hours)
+            
+            self._orderbook_time_range = (start_date, end_date)
+        
+        return self._orderbook_time_range
+    
     def load_orderbook_data(self, file_path: Optional[str] = None) -> pl.DataFrame:
         """Load orderbook data from consolidated CSV files."""
+        # Return cached data if available and no specific file requested
+        if file_path is None and self._cached_orderbook_data is not None:
+            return self._cached_orderbook_data
+        
         if file_path:
             files = [Path(file_path)]
         else:
@@ -69,44 +105,83 @@ class PolymarketDataProcessor:
             pl.col("timestamp").str.to_datetime("%Y-%m-%d %H:%M:%S%.f")
         ])
         
+        # Cache the data and reset time range cache
+        if file_path is None:
+            self._cached_orderbook_data = combined_df
+            self._orderbook_time_range = None  # Reset to trigger recalculation
+        
         return combined_df
     
-    def load_klines_data(self, crypto_pair: str = "ETHUSDT") -> pl.DataFrame:
-        """Load 1-minute KLINES data for the specified crypto pair."""
-        pattern = f"{crypto_pair}-1m-*.csv"
-        klines_files = list(self.klines_dir.glob(pattern))
+    def load_klines_data(self, crypto_pair: str = "ETHUSDT", buffer_hours: int = 2) -> pl.DataFrame:
+        """
+        Load 1-minute KLINES data for the specified crypto pair.
         
-        if not klines_files:
-            raise FileNotFoundError(f"No KLINES data found for {crypto_pair}")
+        The date range is automatically determined based on the loaded orderbook data,
+        with an optional buffer to ensure complete coverage.
         
-        klines_files.sort()
+        Args:
+            crypto_pair: The crypto pair to load (e.g., "ETHUSDT")
+            buffer_hours: Hours to add before/after orderbook range for better analysis
         
-        df_list = []
-        for file in klines_files:
-            # Assuming standard KLINES format: timestamp,open,high,low,close,volume
-            df = pl.read_csv(file)
-            if df.height > 0:  # Only add non-empty dataframes
-                df_list.append(df)
+        Returns:
+            Polars DataFrame with KLINES data covering the orderbook time range
+        """
+        # Get the smart date range based on orderbook data
+        start_date, end_date = self._determine_klines_date_range(buffer_hours)
         
-        if not df_list:
-            raise ValueError(f"All KLINES files for {crypto_pair} are empty")
+        cache = CryptoDataCache()
+        klines_df = cache.fetch_data(crypto_pair, DATA_TYPES.KLINES, start_date, end_date, interval="1m")
+        return klines_df
+    
+    def get_data_time_range_info(self) -> Dict[str, datetime]:
+        """
+        Get information about the automatically determined time ranges.
         
-        combined_df = pl.concat(df_list)
+        Returns:
+            Dictionary with orderbook and klines time range information
+        """
+        if self._cached_orderbook_data is None:
+            raise ValueError("No orderbook data loaded yet. Call load_orderbook_data() first.")
         
-        # Ensure timestamp column is datetime
-        if "timestamp" in combined_df.columns:
-            combined_df = combined_df.with_columns([
-                pl.col("timestamp").str.to_datetime("%Y-%m-%d %H:%M:%S%.f")
-            ])
-        elif combined_df.columns[0] in ["open_time", "time"]:
-            # If first column is timestamp with different name
-            first_col = combined_df.columns[0]
-            combined_df = combined_df.rename({first_col: "timestamp"})
-            combined_df = combined_df.with_columns([
-                pl.col("timestamp").str.to_datetime("%Y-%m-%d %H:%M:%S%.f")
-            ])
+        klines_start, klines_end = self._determine_klines_date_range()
         
-        return combined_df.sort("timestamp")
+        return {
+            "orderbook_start": self._cached_orderbook_data['timestamp'].min(),
+            "orderbook_end": self._cached_orderbook_data['timestamp'].max(),
+            "klines_start": klines_start,
+            "klines_end": klines_end,
+            "orderbook_duration_hours": (
+                self._cached_orderbook_data['timestamp'].max() - 
+                self._cached_orderbook_data['timestamp'].min()
+            ).total_seconds() / 3600,
+            "klines_duration_hours": (klines_end - klines_start).total_seconds() / 3600
+        }
+    
+    def validate_data_coverage(self, klines_df: pl.DataFrame) -> Dict[str, bool]:
+        """
+        Validate that KLINES data properly covers the orderbook data time range.
+        
+        Args:
+            klines_df: The KLINES dataframe to validate
+            
+        Returns:
+            Dictionary with validation results
+        """
+        if self._cached_orderbook_data is None:
+            raise ValueError("No orderbook data loaded yet. Call load_orderbook_data() first.")
+        
+        orderbook_start = self._cached_orderbook_data['timestamp'].min()
+        orderbook_end = self._cached_orderbook_data['timestamp'].max()
+        
+        klines_start = klines_df['timestamp'].min()
+        klines_end = klines_df['timestamp'].max()
+        
+        return {
+            "covers_start": klines_start <= orderbook_start,
+            "covers_end": klines_end >= orderbook_end,
+            "has_data": len(klines_df) > 0,
+            "time_overlap": klines_start <= orderbook_end and klines_end >= orderbook_start
+        }
     
     def resample_orderbook_to_intervals(self, df: pl.DataFrame, interval: str = "1m") -> pl.DataFrame:
         """
@@ -261,10 +336,23 @@ print("Loading orderbook data...")
 orderbook_df = processor.load_orderbook_data()
 print(f"Loaded {len(orderbook_df)} orderbook records")
 
-# Load KLINES data for Ethereum
+# Load KLINES data for Ethereum (automatically synced with orderbook date range)
 print("Loading ETHUSDT KLINES data...")
 eth_klines = processor.load_klines_data("ETHUSDT")
 print(f"Loaded {len(eth_klines)} KLINES records")
+
+# Show time range information
+print("\\nData time range information:")
+time_info = processor.get_data_time_range_info()
+for key, value in time_info.items():
+    print(f"  {key}: {value}")
+
+# Validate data coverage
+print("\\nValidating KLINES data coverage:")
+coverage = processor.validate_data_coverage(eth_klines)
+for key, value in coverage.items():
+    status = "✓" if value else "✗"
+    print(f"  {key}: {status} {value}")
 
 # Resample orderbook data to 1-minute intervals
 print("Resampling orderbook data...")
