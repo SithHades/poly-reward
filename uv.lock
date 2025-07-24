@@ -386,7 +386,7 @@ wheels = [
 
 [[package]]
 name = "crypto-data-cache"
-version = "0.2.0"
+version = "0.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pandas" },
@@ -395,9 +395,9 @@ dependencies = [
     { name = "ruff" },
     { name = "ty" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e2/5f/da9c1c59f9259ee58a93ef03c50ce2bebad82637eba2f63f3c5d825f225d/crypto_data_cache-0.2.0.tar.gz", hash = "sha256:16ea7f7b5d280cf60c60f2b93314db32781d9452578645abad4ac62a056438fd", size = 29881, upload_time = "2025-07-20T11:55:13.899Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/89/79/8f6a74f017137b7a182eb1c00cb4d009c968ce8c34787c7b2784e794b603/crypto_data_cache-0.2.1.tar.gz", hash = "sha256:31b76727fa6e9722ac0f35dcef925d3977d45c8d5af67cb3fd2958cdb2cdeb59", size = 29900, upload_time = "2025-07-23T06:23:43.262Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3a/9d/a2748dffcc15abbb7b11c325b466ab47b9e76b2db68fbdd4e14df685714c/crypto_data_cache-0.2.0-py3-none-any.whl", hash = "sha256:ace31d13f92e99d29fc49fb375dc1ae71f97af0c66aec074df18e478a3b17fcd", size = 20939, upload_time = "2025-07-20T11:55:12.675Z" },
+    { url = "https://files.pythonhosted.org/packages/65/10/7435ea593301461ab9eb969c6010cae9ac0948ecb9f20413179a01dad442/crypto_data_cache-0.2.1-py3-none-any.whl", hash = "sha256:da99e04679b645dfc8fd82cb5b56454da5da25f8ce61b4a7dae1a8fec599891a", size = 20948, upload_time = "2025-07-23T06:23:42.284Z" },
 ]
 
 [[package]]
@@ -1736,7 +1736,7 @@ requires-dist = [
     { name = "aiohttp", specifier = ">=3.12.13" },
     { name = "asyncio", specifier = ">=3.4.3" },
     { name = "ccxt", specifier = ">=4.4.91" },
-    { name = "crypto-data-cache", specifier = ">=0.2.0" },
+    { name = "crypto-data-cache", specifier = ">=0.2.1" },
     { name = "dependency-injector", specifier = ">=4.47.1" },
     { name = "eth-account", specifier = ">=0.13.7" },
     { name = "jupyter", specifier = ">=1.1.1" },
