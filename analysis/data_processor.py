@@ -82,11 +82,11 @@ class PolymarketDataProcessor:
         
         if file_path:
             files = [Path(file_path)]
-        else:
-            # Load latest consolidated file
+        else:       
+            # Load all consolidated files
             files = list(self.processed_dir.glob("consolidated_all_markets_*.csv"))
             files.sort(key=lambda x: x.name)
-            files = files[-1:] if files else []
+            # Process all files, not just the last one
         
         if not files:
             raise FileNotFoundError("No orderbook data files found")
@@ -128,9 +128,23 @@ class PolymarketDataProcessor:
         """
         # Get the smart date range based on orderbook data
         start_date, end_date = self._determine_klines_date_range(buffer_hours)
+
+        start_date_str = start_date.strftime("%Y-%m-%d")
+        end_date_str = end_date.strftime("%Y-%m-%d")
         
         cache = CryptoDataCache()
-        klines_df = cache.fetch_data(crypto_pair, DATA_TYPES.KLINES, start_date, end_date, interval="1m")
+        klines_df = cache.fetch_data(crypto_pair, DATA_TYPES.KLINE, start_date_str, end_date_str, interval="1m", prefer_monthly=False)
+        
+        # Convert to polars and add timestamp column for compatibility
+        if isinstance(klines_df, pd.DataFrame):
+            klines_df = pl.from_pandas(klines_df)
+        
+        # Add timestamp column using open_time for consistency with orderbook data
+        # Convert to timezone-naive to match orderbook data
+        klines_df = klines_df.with_columns([
+            pl.col("open_time").dt.replace_time_zone(None).alias("timestamp")
+        ])
+        
         return klines_df
     
     def get_data_time_range_info(self) -> Dict[str, datetime]:
@@ -191,9 +205,12 @@ class PolymarketDataProcessor:
             df: Orderbook dataframe
             interval: Resampling interval (e.g., "1m", "5m", "1h")
         """
+        # Sort by timestamp and grouping columns first - required for group_by_dynamic
+        df_sorted = df.sort(["crypto", "market_slug", "asset_id", "timestamp"])
+        
         # Group by crypto, market_slug, and time intervals
         resampled = (
-            df.group_by_dynamic(
+            df_sorted.group_by_dynamic(
                 "timestamp", 
                 every=interval,
                 by=["crypto", "market_slug", "asset_id"]
@@ -209,10 +226,10 @@ class PolymarketDataProcessor:
                 pl.col("size").count().alias("tick_count"),
                 
                 # Bid/Ask analysis
-                pl.col("price").filter(pl.col("side") == "buy").mean().alias("avg_bid"),
-                pl.col("price").filter(pl.col("side") == "sell").mean().alias("avg_ask"),
-                pl.col("size").filter(pl.col("side") == "buy").sum().alias("bid_volume"),
-                pl.col("size").filter(pl.col("side") == "sell").sum().alias("ask_volume"),
+                pl.col("price").filter(pl.col("side") == "bid").mean().alias("avg_bid"),
+                pl.col("price").filter(pl.col("side") == "ask").mean().alias("avg_ask"),
+                pl.col("size").filter(pl.col("side") == "bid").sum().alias("bid_volume"),
+                pl.col("size").filter(pl.col("side") == "ask").sum().alias("ask_volume"),
             ])
         )
         
@@ -308,9 +325,9 @@ class PolymarketDataProcessor:
              (1 + pl.col("volume_imbalance").abs())).alias("opportunity_score"),
             
             # Market direction signals
-            pl.when(pl.col("bid_ratio") > 0.6).then("bullish")
-            .when(pl.col("bid_ratio") < 0.4).then("bearish")
-            .otherwise("neutral").alias("market_sentiment"),
+            pl.when(pl.col("bid_ratio") > 0.6).then(pl.lit("bullish"))
+            .when(pl.col("bid_ratio") < 0.4).then(pl.lit("bearish"))
+            .otherwise(pl.lit("neutral")).alias("market_sentiment"),
             
             # Risk indicators
             pl.col("price_range").alias("volatility_risk"),

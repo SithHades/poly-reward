@@ -66,7 +66,7 @@ class StrategyConfig:
             }
 
 
-class PolymарketMarketMaker:
+class PolymaрketMarketMaker:
     """
     Advanced market making strategy for Polymarket hourly prediction markets.
     
@@ -377,10 +377,10 @@ def create_strategy_demo():
     """Create a demonstration of the market making strategy."""
     
     demo_code = '''
-# Example usage of PolymарketMarketMaker
+# Example usage of PolymaрketMarketMaker
 
-from analysis.strategy_implementation import PolymарketMarketMaker, StrategyConfig
-from analysis.data_processor import PolymарketDataProcessor
+from analysis.strategy_implementation import PolymaрketMarketMaker, StrategyConfig
+from analysis.data_processor import PolymaрketDataProcessor
 import logging
 
 # Set up logging
@@ -393,10 +393,10 @@ config = StrategyConfig(
     volume_multiplier=1.5
 )
 
-strategy = PolymарketMarketMaker(config)
+strategy = PolymaрketMarketMaker(config)
 
 # Load and process data
-processor = PolymарketDataProcessor()
+processor = PolymaрketDataProcessor()
 orderbook_df = processor.load_orderbook_data()
 features_df = processor.calculate_market_features(
     processor.resample_orderbook_to_intervals(orderbook_df, "1m")
@@ -426,7 +426,7 @@ print(f"Strategy performance: {performance}")
 if __name__ == "__main__":
     # Quick test of the strategy
     config = StrategyConfig()
-    strategy = PolymарketMarketMaker(config)
-    print("PolymарketMarketMaker initialized successfully!")
+    strategy = PolymaрketMarketMaker(config)
+    print("PolymaрketMarketMaker initialized successfully!")
     print(f"Configuration: min_spread={config.min_spread_threshold}")
     print("Ready for signal generation and execution.")
