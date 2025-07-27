@@ -140,9 +140,9 @@ class PolymarketDataProcessor:
             klines_df = pl.from_pandas(klines_df)
         
         # Add timestamp column using open_time for consistency with orderbook data
-        # Convert to timezone-naive to match orderbook data
+        # Convert to timezone-naive and cast to microsecond precision to match orderbook data
         klines_df = klines_df.with_columns([
-            pl.col("open_time").dt.replace_time_zone(None).alias("timestamp")
+            pl.col("open_time").dt.replace_time_zone(None).cast(pl.Datetime("us")).alias("timestamp")
         ])
         
         return klines_df
