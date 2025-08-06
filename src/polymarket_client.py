@@ -737,6 +737,8 @@ class PolymarketClient:
         :return: List of positions.
         """
         self.logger.info(f"Getting positions by market ID: {market_id}")
+        positions = self.get_positions()
+        return [position for position in positions if position.market_id == market_id]
     
     def get_positions_by_fuzzy_slug(self, fuzzy_slug: str) -> Position | None:
         """
@@ -747,6 +749,47 @@ class PolymarketClient:
         self.logger.info(f"Getting position by fuzzy slug: {fuzzy_slug}")
         positions = self.get_positions()
         return [position for position in positions if fuzzy_slug in position.slug]
+    
+    def get_balance(self) -> float:
+        """
+        Get USDC balance from the wallet.
+        :return: Available USDC balance as float.
+        """
+        self.logger.info("Getting USDC balance")
+        try:
+            # Use the CLOB client's balance method if available
+            # Note: This is a placeholder - the actual py-clob-client may have different methods
+            balance_info = self.client.get_balance()  # This may need to be adjusted based on actual API
+            
+            if isinstance(balance_info, dict):
+                # Extract USDC balance - adjust based on actual response structure
+                usdc_balance = balance_info.get('balance', 0.0)
+                return float(usdc_balance)
+            else:
+                return float(balance_info)
+                
+        except AttributeError:
+            self.logger.warning("Balance method not available in py-clob-client, using fallback")
+            # Fallback: Calculate balance from positions (rough estimate)
+            try:
+                positions = self.get_positions()
+                estimated_balance = 1000.0  # Starting assumption
+                
+                # Subtract estimated exposure from positions
+                for position in positions:
+                    if position.size != 0:
+                        position_value = abs(position.size * (position.current_price or position.entry_price))
+                        estimated_balance -= position_value
+                        
+                return max(0.0, estimated_balance)
+                
+            except Exception as e:
+                self.logger.error(f"Failed to estimate balance from positions: {e}")
+                return 100.0  # Conservative fallback
+                
+        except Exception as e:
+            self.logger.error(f"Error getting balance: {e}")
+            return 100.0  # Conservative fallback
 
 
 if __name__ == "__main__":

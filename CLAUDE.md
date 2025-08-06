@@ -41,11 +41,3 @@ The project is currently minimal with:
 - **pyyaml**: YAML parser and emitter
 
 This suggests the project may be related to financial trading or order book management with async capabilities and dependency injection architecture.
-
-## Task Master AI Integration
-
-The project includes extensive task management workflow configuration in `.windsurfrules` for coordinating development using the `task-master-ai` system. Key commands:
-- `task-master list`: View current tasks
-- `task-master next`: Get next task to work on
-- `task-master set-status --id=<id> --status=done`: Mark tasks complete
-- `task-master expand --id=<id>`: Break down complex tasks
