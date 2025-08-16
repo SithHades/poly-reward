@@ -32,4 +32,5 @@ dependencies = [
     "jupyterlab>=4.4.4",
     "crypto-data-cache>=0.2.1",
     "pyarrow>=21.0.0",
+    "web3>=7.13.0",
 ]

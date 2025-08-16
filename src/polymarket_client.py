@@ -39,6 +39,7 @@ from src.core.models import (
     Spread,
     Token,
 )
+from src.w3.utils import setup_web3, token_balance_of
 
 
 dotenv.load_dotenv()
@@ -66,6 +67,9 @@ class PolymarketClient:
         self.logger = logging.getLogger("Client")
 
         self.browser_address = address or os.getenv("BROWSER_ADDRESS")
+
+        self.w3 = setup_web3(os.getenv("POLYGON_RPC_URL"), os.getenv("PK"))
+        self.eth_address = self.w3.eth.account.from_key(os.getenv("PK")).address
 
         client = ClobClient(
             host,
@@ -100,6 +104,53 @@ class PolymarketClient:
         self.client = client
 
         self.client.set_api_creds(self.client.create_or_derive_api_creds())
+    
+    def get_collateral_balance(self) -> float:
+        """
+        Get the USDC balance from the browser wallet address.
+        :return: The USDC balance as a float.
+        """
+        self.logger.info("Getting USDC collateral balance")
+        
+        if not self.browser_address:
+            raise ValueError("BROWSER_ADDRESS is not set - cannot check USDC balance")
+        
+        try:
+            # Get the collateral address from the client (should be USDC contract)
+            collateral_address = self.client.get_collateral_address()
+            self.logger.info(f"Using collateral address: {collateral_address}")
+            
+            # Check balance of the browser_address (where your USDC is stored)
+            balance = token_balance_of(
+                self.w3, collateral_address, self.browser_address
+            )
+            
+            self.logger.info(f"USDC balance for {self.browser_address}: {balance}")
+            return balance
+            
+        except Exception as e:
+            self.logger.error(f"Error getting collateral balance: {e}")
+            
+            usdc_addresses = [
+                "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",  # USDC (bridged)
+                "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",  # USDC.e (native)
+            ]
+            
+            for usdc_address in usdc_addresses:
+                try:
+                    self.logger.info(f"Trying USDC contract at: {usdc_address}")
+                    balance = token_balance_of(
+                        self.w3, usdc_address, self.browser_address
+                    )
+                    if balance > 0:
+                        self.logger.info(f"Found USDC balance: {balance} using contract {usdc_address}")
+                        return balance
+                except Exception as fallback_error:
+                    self.logger.warning(f"Failed to check balance with {usdc_address}: {fallback_error}")
+                    continue
+            
+            self.logger.error("All USDC balance checks failed")
+            return 0.0
 
     def get_midpoint(self, token: Token) -> Midpoint:
         """
