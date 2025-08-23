@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Tuple
 from src.core.models import Market, SimplifiedMarket, OrderbookSnapshot, OrderbookLevel, MarketCondition
 from src.core.constants import MARKETS
 from src.polymarket_client import PolymarketClient
-from src.parsing_utils import get_current_market_slug, get_next_market_slug, slug_to_datetime
+from src.parsing_utils import get_current_market_slug, get_next_market_slug, slug_to_datetime, get_market_end_time_from_slug
 from .config import MarketMakingConfig
 from .risk_manager import RiskManager
 from .order_manager import OrderManager
@@ -128,10 +128,20 @@ class MarketMakingStrategy:
         elif len(market.tokens) > 2:
             self.logger.info(f"{market_info} - Has {len(market.tokens)} tokens, will focus on first 2")
             
-        # More flexible time to expiry check
-        if market.end_date_iso:
-            time_to_expiry = market.end_date_iso - datetime.now(market.end_date_iso.tzinfo)
+        # Calculate market end time from slug (ignore unreliable end_date_iso)
+        market_end_time = get_market_end_time_from_slug(market.market_slug)
+        if market_end_time:
+            # Convert current time to ET for consistent comparison
+            from src.parsing_utils import ET
+            current_time_et = datetime.now(ET)
+            
+            time_to_expiry = market_end_time - current_time_et
             expiry_hours = time_to_expiry.total_seconds() / 3600
+            
+            # Debug logging
+            self.logger.debug(f"{market_info} - Market end time (from slug): {market_end_time}")
+            self.logger.debug(f"{market_info} - Current time ET: {current_time_et}")
+            self.logger.debug(f"{market_info} - Time to expiry: {expiry_hours:.2f} hours")
             
             # Much more flexible time check - allow trading much closer to expiry
             min_minutes = max(5, self.config.min_time_to_expiry_hours * 60)  # At least 5 minutes
@@ -142,7 +152,7 @@ class MarketMakingStrategy:
             else:
                 self.logger.info(f"{market_info} - Time to expiry: {expiry_hours:.2f} hours")
         else:
-            self.logger.warning(f"{market_info} - No end date available")
+            self.logger.warning(f"{market_info} - Could not parse end time from market slug: {market.market_slug}")
             
         self.logger.info(f"{market_info} - Passed all tradeability checks")
         return True
@@ -300,9 +310,13 @@ class MarketMakingStrategy:
             # Process each active market
             for market_id, market in self.active_markets.items():
                 try:
-                    # Skip if market is too close to expiry
-                    if market.end_date_iso:
-                        time_to_expiry = market.end_date_iso - datetime.now(market.end_date_iso.tzinfo)
+                    # Skip if market is too close to expiry (using slug-based timing)
+                    market_end_time = get_market_end_time_from_slug(market.market_slug)
+                    if market_end_time:
+                        from src.parsing_utils import ET
+                        current_time_et = datetime.now(ET)
+                        time_to_expiry = market_end_time - current_time_et
+                        
                         if time_to_expiry.total_seconds() < self.config.market_close_buffer_minutes * 60:
                             self.logger.info(f"Market {market.market_slug} too close to expiry, cancelling orders")
                             self.order_manager.cancel_market_orders(market_id)

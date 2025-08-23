@@ -33,9 +33,8 @@ def map_market(raw: dict) -> Market:
                 min_size=rewards_data.get("min_size", 0),
                 max_spread=rewards_data.get("max_spread", 0),
             )
-        end_date_iso = raw.get("end_date_iso", None)
-        if end_date_iso:
-            end_date_iso = datetime.fromisoformat(end_date_iso)
+        # Ignore end_date_iso from API as it's unreliable - calculate from market slug instead
+        end_date_iso = None
         # Build Market
         return Market(
             enable_order_book=raw.get("enable_order_book", False),
@@ -228,6 +227,26 @@ def convert_to_et(dt: datetime, source_tz: tzinfo = None) -> datetime:
             raise ValueError("source_tz must be provided for naive datetime")
         dt = dt.replace(tzinfo=source_tz)
     return dt.astimezone(ET)
+
+
+def get_market_end_time_from_slug(market_slug: str) -> Optional[datetime]:
+    """
+    Calculate the market end time from the market slug.
+    For hourly markets, they close 1 hour after the time indicated in the slug.
+    
+    Example: ethereum-up-or-down-august-23-7am-et closes at 8am ET on August 23rd
+    """
+    try:
+        # Parse the slug to get the market start time
+        market_start = slug_to_datetime(market_slug)
+        if market_start is None:
+            return None
+        
+        # Hourly markets close 1 hour after they start
+        market_end = market_start + timedelta(hours=1)
+        return market_end
+    except Exception:
+        return None
 
 
 def get_current_market_hour_et() -> datetime:
