@@ -117,15 +117,12 @@ class PolymarketClient:
         
         try:
             # Get the collateral address from the client (should be USDC contract)
-            collateral_address = self.client.get_collateral_address()
-            self.logger.info(f"Using collateral address: {collateral_address}")
-            
+            collateral_address = self.client.get_collateral_address()            
             # Check balance of the browser_address (where your USDC is stored)
             balance = token_balance_of(
                 self.w3, collateral_address, self.browser_address
             )
             
-            self.logger.info(f"USDC balance for {self.browser_address}: {balance}")
             return balance
             
         except Exception as e:
@@ -698,11 +695,12 @@ class PolymarketClient:
         """
         self.logger.info("Getting all active markets")
         try:
-            data = self.client.get_active_markets()
+            # Use get_markets instead of get_active_markets (py_clob_client method name)
+            data = self.client.get_markets()
             next_cursor = data.get("next_cursor")
             raw_markets = data.get("data", [])
             while data and data.get("next_cursor") != "LTE=":
-                data = self.client.get_active_markets(next_cursor=next_cursor)
+                data = self.client.get_markets(next_cursor=next_cursor)
                 next_cursor = data.get("next_cursor")
                 raw_markets.extend(data.get("data", []))
             markets = []
@@ -712,7 +710,12 @@ class PolymarketClient:
                 except ValueError as e:
                     self.logger.error(f"Error mapping active market {market}: {e}")
             return markets
+        except AttributeError as e:
+            # Method doesn't exist - this is a programming error, should be raised
+            self.logger.error(f"Method error getting active markets: {e}")
+            raise e
         except Exception as e:
+            # Other errors (network, API issues, etc.) - log but return empty list
             self.logger.error(f"Unhandled error getting active markets: {e}")
             if "markets" in locals():
                 return markets
@@ -808,39 +811,29 @@ class PolymarketClient:
         """
         self.logger.info("Getting USDC balance")
         try:
-            # Use the CLOB client's balance method if available
-            # Note: This is a placeholder - the actual py-clob-client may have different methods
-            balance_info = self.client.get_balance()  # This may need to be adjusted based on actual API
-            
-            if isinstance(balance_info, dict):
-                # Extract USDC balance - adjust based on actual response structure
-                usdc_balance = balance_info.get('balance', 0.0)
-                return float(usdc_balance)
-            else:
-                return float(balance_info)
+            balance_info = self.get_collateral_balance()
+            return balance_info
                 
         except AttributeError:
             self.logger.warning("Balance method not available in py-clob-client, using fallback")
-            # Fallback: Calculate balance from positions (rough estimate)
             try:
                 positions = self.get_positions()
-                estimated_balance = 1000.0  # Starting assumption
+                estimated_balance = 0.0
                 
-                # Subtract estimated exposure from positions
                 for position in positions:
                     if position.size != 0:
-                        position_value = abs(position.size * (position.current_price or position.entry_price))
+                        position_value = abs(position.size * (position.current_price or 0.0))
                         estimated_balance -= position_value
                         
                 return max(0.0, estimated_balance)
                 
             except Exception as e:
                 self.logger.error(f"Failed to estimate balance from positions: {e}")
-                return 100.0  # Conservative fallback
+                return 0.0
                 
         except Exception as e:
             self.logger.error(f"Error getting balance: {e}")
-            return 100.0  # Conservative fallback
+            return 0.0
 
 
 if __name__ == "__main__":

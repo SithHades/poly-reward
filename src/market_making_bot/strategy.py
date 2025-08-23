@@ -25,8 +25,9 @@ class MarketMakingStrategy:
         
         # Strategy state
         self.active_markets: Dict[str, Market] = {}
-        self.last_market_refresh = datetime.now()
+        # Initialize last_market_refresh to past time to trigger immediate market loading
         self.market_refresh_interval = 300  # Refresh market list every 5 minutes
+        self.last_market_refresh = datetime.now() - timedelta(seconds=self.market_refresh_interval + 1)
         
         # Performance tracking
         self.markets_evaluated = 0
@@ -63,22 +64,6 @@ class MarketMakingStrategy:
             except Exception as e:
                 self.logger.warning(f"Could not fetch next market {next_slug}: {e}")
                 
-            # Additionally, search for any other active hourly ETH markets
-            try:
-                all_markets = self.client.get_active_markets()
-                hourly_eth_markets = [
-                    market for market in all_markets 
-                    if self._is_hourly_eth_market(market) and self._is_market_tradeable(market)
-                    and market.condition_id not in [m.condition_id for m in active_markets]
-                ]
-                active_markets.extend(hourly_eth_markets)
-                
-                if hourly_eth_markets:
-                    self.logger.info(f"Found {len(hourly_eth_markets)} additional hourly ETH markets")
-                    
-            except Exception as e:
-                self.logger.error(f"Failed to search for additional markets: {e}")
-                
             self.logger.info(f"Total active markets found: {len(active_markets)}")
             return active_markets
             
@@ -110,26 +95,56 @@ class MarketMakingStrategy:
         return contains_pattern and contains_time
         
     def _is_market_tradeable(self, market: Market) -> bool:
-        """Check if a market is suitable for trading"""
+        """Check if a market is suitable for trading with detailed logging"""
+        
+        market_info = f"Market {market.market_slug}"
         
         # Basic market status checks
-        if not market.active or market.closed or market.archived or not market.accepting_orders:
+        if not market.active:
+            self.logger.debug(f"{market_info} - Not active")
+            return False
+        
+        if market.closed:
+            self.logger.debug(f"{market_info} - Closed")
             return False
             
-        # Check if market has order book enabled
+        if market.archived:
+            self.logger.debug(f"{market_info} - Archived")
+            return False
+            
+        if not market.accepting_orders:
+            self.logger.debug(f"{market_info} - Not accepting orders")
+            return False
+            
+        # Check if market has order book enabled (less strict - warn instead of block)
         if not market.enable_order_book:
-            return False
+            self.logger.warning(f"{market_info} - Order book not enabled, but attempting anyway")
+            # Don't return False - try to trade anyway
             
-        # Check tokens (should be binary outcome: Up/Down, Yes/No)
-        if len(market.tokens) != 2:
+        # Check tokens (more flexible - allow 2+ tokens, focusing on binary outcomes)
+        if len(market.tokens) < 2:
+            self.logger.debug(f"{market_info} - Has {len(market.tokens)} tokens, need at least 2")
             return False
+        elif len(market.tokens) > 2:
+            self.logger.info(f"{market_info} - Has {len(market.tokens)} tokens, will focus on first 2")
             
-        # Check time to expiry
+        # More flexible time to expiry check
         if market.end_date_iso:
             time_to_expiry = market.end_date_iso - datetime.now(market.end_date_iso.tzinfo)
-            if time_to_expiry.total_seconds() < self.config.min_time_to_expiry_hours * 3600:
+            expiry_hours = time_to_expiry.total_seconds() / 3600
+            
+            # Much more flexible time check - allow trading much closer to expiry
+            min_minutes = max(5, self.config.min_time_to_expiry_hours * 60)  # At least 5 minutes
+            
+            if time_to_expiry.total_seconds() < min_minutes * 60:
+                self.logger.debug(f"{market_info} - Too close to expiry: {expiry_hours:.2f} hours left (min: {min_minutes/60:.2f} hours)")
                 return False
-                
+            else:
+                self.logger.info(f"{market_info} - Time to expiry: {expiry_hours:.2f} hours")
+        else:
+            self.logger.warning(f"{market_info} - No end date available")
+            
+        self.logger.info(f"{market_info} - Passed all tradeability checks")
         return True
         
     async def evaluate_market_opportunity(self, market: Market) -> Optional[Tuple[str, float, OrderbookSnapshot]]:
@@ -314,7 +329,7 @@ class MarketMakingStrategy:
         """Get available balance for trading"""
         try:
             # Get actual balance from exchange
-            total_balance = self.client.get_balance()
+            total_balance = self.client.get_collateral_balance()
             
             # Calculate total exposure from current risk metrics (local tracking)
             total_exposure = sum(

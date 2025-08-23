@@ -43,7 +43,7 @@
 - [x] **Fixed**: Balance calculation now uses actual exchange balance
 
 ### Balance Management
-- [x] **Fixed**: Added `get_balance()` method to PolymarketClient
+- [x] **Fixed**: Added `get_collateral_balance()` method to PolymarketClient
 - [x] **Fixed**: Strategy now uses real balance instead of hardcoded TODO
 - [x] **Fixed**: Available balance considers current exposure
 
@@ -53,7 +53,7 @@
 **Status**: Partially implemented with fallback
 ```python
 # In polymarket_client.py:762
-balance_info = self.client.get_balance()  # May need API adjustment
+balance_info = self.client.get_collateral_balance()  # May need API adjustment
 ```
 **Action Required**: Verify `py-clob-client` has balance method, or implement alternative
 
@@ -137,7 +137,7 @@ def reconcile_positions():
 ## 🔧 How to Complete Implementation
 
 ### Immediate Actions (Next 1-2 hours)
-1. **Test actual balance API**: Verify `get_balance()` works with real API
+1. **Test actual balance API**: Verify `get_collateral_balance()` works with real API
 2. **Test order placement**: Verify orders can be placed in dry-run mode  
 3. **Test market discovery**: Ensure it finds real active markets
 

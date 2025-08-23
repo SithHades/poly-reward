@@ -22,8 +22,8 @@ async def run_conservative_bot():
         crypto="ethereum",
         
         # Conservative trading parameters
-        base_position_size=10.0,          # Small position sizes
-        max_position_size=25.0,           # Low max per market
+        base_position_size=5.0,          # Small position sizes
+        max_position_size=10.0,           # Low max per market
         min_spread_threshold=0.025,       # Only trade markets with >2.5% spread
         target_profit_margin=0.010,       # Target 1% profit per trade
         
@@ -58,8 +58,12 @@ async def run_conservative_bot():
     print(f"Target margin: {config.target_profit_margin:.2%}")
     print()
     
-    # Run for 2 hours
-    await bot.run_for_duration(2.0)
+    # Run for 6 minutes (0.1 hours)
+    try:
+        await bot.run_for_duration(0.1)
+    except KeyboardInterrupt:
+        print("\nReceived Ctrl+C, stopping bot...")
+        bot.stop()
 
 
 async def run_aggressive_bot():
@@ -107,7 +111,11 @@ async def run_aggressive_bot():
     print()
     
     # Run for 1 hour
-    await bot.run_for_duration(1.0)
+    try:
+        await bot.run_for_duration(1.0)
+    except KeyboardInterrupt:
+        print("\nReceived Ctrl+C, stopping bot...")
+        bot.stop()
 
 
 async def test_market_finding():
@@ -217,7 +225,7 @@ def main():
     
     print("🤖 Polymarket Market Making Bot Examples")
     print("=" * 50)
-    print("1. Conservative Bot (2 hours)")
+    print("1. Conservative Bot (6min)")
     print("2. Aggressive Bot (1 hour)") 
     print("3. Test Market Discovery")
     print("4. Market Analysis Only")
@@ -228,18 +236,30 @@ def main():
         choice = input("Select option (1-5): ").strip()
         
         if choice == "1":
-            asyncio.run(run_conservative_bot())
+            try:
+                asyncio.run(run_conservative_bot())
+            except KeyboardInterrupt:
+                print("\n⚠️ Bot stopped by user (Ctrl+C)")
         elif choice == "2":
             print("⚠️  Are you sure you want to run aggressive settings? (y/N): ")
             confirm = input().strip().lower()
             if confirm == 'y':
-                asyncio.run(run_aggressive_bot())
+                try:
+                    asyncio.run(run_aggressive_bot())
+                except KeyboardInterrupt:
+                    print("\n⚠️ Bot stopped by user (Ctrl+C)")
             else:
                 print("Cancelled.")
         elif choice == "3":
-            asyncio.run(test_market_finding())
+            try:
+                asyncio.run(test_market_finding())
+            except KeyboardInterrupt:
+                print("\n⚠️ Market discovery stopped by user (Ctrl+C)")
         elif choice == "4":
-            asyncio.run(run_market_analyzer())
+            try:
+                asyncio.run(run_market_analyzer())
+            except KeyboardInterrupt:
+                print("\n⚠️ Market analysis stopped by user (Ctrl+C)")
         elif choice == "5":
             print("Goodbye!")
         else:

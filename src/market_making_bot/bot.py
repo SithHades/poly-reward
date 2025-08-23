@@ -36,6 +36,9 @@ class MarketMakingBot:
         self.uptime_seconds = 0
         self.errors_encountered = 0
         
+        # Track current task for signal handling
+        self._current_task = None
+        
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -44,6 +47,27 @@ class MarketMakingBot:
         """Handle shutdown signals gracefully"""
         self.logger.info(f"Received signal {signum}, initiating graceful shutdown...")
         self.stop()
+        
+        # Cancel the current asyncio task if it exists
+        if self._current_task and not self._current_task.done():
+            self.logger.info("Cancelling current asyncio task...")
+            self._current_task.cancel()
+            
+    async def _interruptible_sleep(self, duration: float):
+        """Sleep for duration but check is_running flag every second for quick shutdown"""
+        start_time = datetime.now()
+        
+        while (datetime.now() - start_time).total_seconds() < duration:
+            if not self.is_running:
+                self.logger.debug("Sleep interrupted due to shutdown")
+                break
+                
+            # Sleep for 1 second at a time, or remaining duration if less than 1 second
+            remaining = duration - (datetime.now() - start_time).total_seconds()
+            sleep_time = min(1.0, remaining)
+            
+            if sleep_time > 0:
+                await asyncio.sleep(sleep_time)
         
     async def start(self):
         """Start the market making bot"""
@@ -100,7 +124,8 @@ class MarketMakingBot:
                 
                 if sleep_duration > 0:
                     self.logger.debug(f"Cycle completed in {cycle_duration:.2f}s, sleeping for {sleep_duration:.2f}s")
-                    await asyncio.sleep(sleep_duration)
+                    # Sleep in small increments to allow for quick shutdown
+                    await self._interruptible_sleep(sleep_duration)
                 else:
                     self.logger.warning(f"Cycle took {cycle_duration:.2f}s, longer than refresh interval!")
                     
@@ -109,7 +134,7 @@ class MarketMakingBot:
                 self.errors_encountered += 1
                 
                 # Brief pause before retrying
-                await asyncio.sleep(5)
+                await self._interruptible_sleep(5)
                 
                 # Stop if too many consecutive errors
                 if self.errors_encountered > 10:
@@ -139,6 +164,8 @@ class MarketMakingBot:
             self.logger.info(f"Uptime: {self.uptime_seconds/3600:.1f} hours")
             self.logger.info(f"Cycles completed: {self.cycles_completed}")
             self.logger.info(f"Errors encountered: {self.errors_encountered}")
+            
+            self.logger.info(f"Account - Balance: ${self.client.get_collateral_balance():.2f}")
             
             self.logger.info(f"Risk - Total exposure: ${risk_summary['total_exposure']:.2f}")
             self.logger.info(f"Risk - Unrealized PnL: ${risk_summary['total_unrealized_pnl']:.2f}")
@@ -196,20 +223,50 @@ class MarketMakingBot:
         
         self.logger.info(f"Running bot for {duration_hours} hours")
         
+        # Track the current task for signal handling
+        self._current_task = asyncio.current_task()
+        
         # Start bot in background task
         bot_task = asyncio.create_task(self.start())
         
-        # Wait for specified duration
-        await asyncio.sleep(duration_hours * 3600)
-        
-        # Stop the bot
-        self.stop()
-        
-        # Wait for cleanup to complete
         try:
-            await bot_task
-        except Exception as e:
-            self.logger.error(f"Error while stopping bot: {e}")
+            # Wait for specified duration or until bot stops
+            duration_sleep_task = asyncio.create_task(asyncio.sleep(duration_hours * 3600))
+            
+            # Wait for either the duration to complete or the bot task to finish
+            done, pending = await asyncio.wait(
+                [bot_task, duration_sleep_task],
+                return_when=asyncio.FIRST_COMPLETED
+            )
+            
+            # Cancel any pending tasks
+            for task in pending:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                    
+            # If duration completed first, stop the bot
+            if duration_sleep_task in done:
+                self.stop()
+                # Wait for bot to finish cleanup
+                try:
+                    await bot_task
+                except Exception as e:
+                    self.logger.error(f"Error while stopping bot: {e}")
+                    
+        except asyncio.CancelledError:
+            # Handle cancellation (e.g., from signal handler)
+            self.logger.info("Bot run cancelled")
+            self.stop()
+            try:
+                await bot_task
+            except (Exception, asyncio.CancelledError):
+                pass
+        finally:
+            # Clear the current task reference
+            self._current_task = None
             
         self.logger.info(f"Bot run completed after {duration_hours} hours")
         
