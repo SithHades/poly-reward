@@ -13,7 +13,7 @@ class MarketMakingConfig:
     # Trading parameters
     base_position_size: float = 10.0  # Base position size in USD
     max_position_size: float = 100.0  # Maximum position size per market
-    min_spread_threshold: float = 0.02  # Minimum spread to consider profitable (2%)
+    min_spread_threshold: float = 0.015  # Minimum spread to consider profitable (1.5%) - reduced for better opportunities
     target_profit_margin: float = 0.005  # Target profit margin per trade (0.5%)
     
     # Risk management
@@ -29,7 +29,7 @@ class MarketMakingConfig:
     
     # Market timing
     market_close_buffer_minutes: int = 5  # Stop trading X minutes before market close
-    min_time_to_expiry_hours: float = 0.5  # Don't trade markets expiring in less than 30min
+    min_time_to_expiry_hours: float = 0.083  # Don't trade markets expiring in less than 5min (more aggressive)
     
     # Performance monitoring
     enable_logging: bool = True

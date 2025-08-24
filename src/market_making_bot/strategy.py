@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Tuple
 from src.core.models import Market, SimplifiedMarket, OrderbookSnapshot, OrderbookLevel, MarketCondition
 from src.core.constants import MARKETS
 from src.polymarket_client import PolymarketClient
-from src.parsing_utils import get_current_market_slug, get_next_market_slug, slug_to_datetime, get_market_end_time_from_slug
+from src.parsing_utils import ET, get_current_market_slug, get_next_market_slug, slug_to_datetime, get_market_end_time_from_slug
 from .config import MarketMakingConfig
 from .risk_manager import RiskManager
 from .order_manager import OrderManager
@@ -35,7 +35,7 @@ class MarketMakingStrategy:
         self.profitable_spreads_found = 0
         
     async def find_active_markets(self) -> List[Market]:
-        """Find active hourly prediction markets for the configured crypto"""
+        """Find active hourly prediction markets for the configured crypto, prioritizing current market"""
         
         try:
             # Get current and next market slugs
@@ -46,7 +46,7 @@ class MarketMakingStrategy:
             
             active_markets = []
             
-            # Try to get current market
+            # Try to get current market first (highest priority)
             try:
                 current_market = self.client.get_market_by_slug(current_slug)
                 if current_market and self._is_market_tradeable(current_market):
@@ -55,15 +55,19 @@ class MarketMakingStrategy:
             except Exception as e:
                 self.logger.warning(f"Could not fetch current market {current_slug}: {e}")
                 
-            # Try to get next market
+            # Try to get next market only if current market is not available or not suitable for trading
             try:
                 next_market = self.client.get_market_by_slug(next_slug)
-                if next_market and self._is_market_tradeable(next_market):
+                if next_market and self._is_market_tradeable_for_next_hour(next_market):
                     active_markets.append(next_market)
                     self.logger.info(f"Found active next market: {next_market.market_slug}")
             except Exception as e:
                 self.logger.warning(f"Could not fetch next market {next_slug}: {e}")
                 
+            # Sort markets to prioritize current market over next market
+            # Current market should come first for processing
+            active_markets.sort(key=lambda m: self._get_market_priority(m))
+            
             self.logger.info(f"Total active markets found: {len(active_markets)}")
             return active_markets
             
@@ -157,6 +161,86 @@ class MarketMakingStrategy:
         self.logger.info(f"{market_info} - Passed all tradeability checks")
         return True
         
+    def _is_market_tradeable_for_next_hour(self, market: Market) -> bool:
+        """Check if a next-hour market is suitable for trading (only when <= 60 minutes remaining)"""
+        
+        market_info = f"Market {market.market_slug}"
+        
+        # Basic market status checks (same as regular tradeability)
+        if not market.active:
+            self.logger.debug(f"{market_info} - Not active")
+            return False
+        
+        if market.closed:
+            self.logger.debug(f"{market_info} - Closed")
+            return False
+            
+        if market.archived:
+            self.logger.debug(f"{market_info} - Archived")
+            return False
+            
+        if not market.accepting_orders:
+            self.logger.debug(f"{market_info} - Not accepting orders")
+            return False
+            
+        # Check if market has order book enabled (less strict - warn instead of block)
+        if not market.enable_order_book:
+            self.logger.warning(f"{market_info} - Order book not enabled, but attempting anyway")
+            
+        # Check tokens (more flexible - allow 2+ tokens, focusing on binary outcomes)
+        if len(market.tokens) < 2:
+            self.logger.debug(f"{market_info} - Has {len(market.tokens)} tokens, need at least 2")
+            return False
+        elif len(market.tokens) > 2:
+            self.logger.info(f"{market_info} - Has {len(market.tokens)} tokens, will focus on first 2")
+            
+        # Calculate market end time from slug (ignore unreliable end_date_iso)
+        market_end_time = get_market_end_time_from_slug(market.market_slug)
+        if market_end_time:
+            # Convert current time to ET for consistent comparison
+            from src.parsing_utils import ET
+            current_time_et = datetime.now(ET)
+            
+            time_to_expiry = market_end_time - current_time_et
+            expiry_hours = time_to_expiry.total_seconds() / 3600
+            
+            # Debug logging
+            self.logger.debug(f"{market_info} - Market end time (from slug): {market_end_time}")
+            self.logger.debug(f"{market_info} - Current time ET: {current_time_et}")
+            self.logger.debug(f"{market_info} - Time to expiry: {expiry_hours:.2f} hours")
+            
+            # For next-hour markets, only trade when <= 60 minutes remaining (closer to market open)
+            if expiry_hours > 1.0:
+                self.logger.info(f"{market_info} - Next market not ready for trading yet: {expiry_hours:.2f} hours left (wait until <= 1.0 hour)")
+                return False
+            elif expiry_hours <= 0.0833:  # 5 minutes
+                self.logger.debug(f"{market_info} - Too close to expiry: {expiry_hours:.2f} hours left")
+                return False
+            else:
+                self.logger.info(f"{market_info} - Next market ready for trading: {expiry_hours:.2f} hours to expiry")
+        else:
+            self.logger.warning(f"{market_info} - Could not parse end time from market slug: {market.market_slug}")
+            
+        self.logger.info(f"{market_info} - Passed all next-hour tradeability checks")
+        return True
+        
+    def _get_market_priority(self, market: Market) -> int:
+        """Get priority for market sorting (lower number = higher priority)"""
+        market_end_time = get_market_end_time_from_slug(market.market_slug)
+        if market_end_time:
+            from src.parsing_utils import ET
+            current_time_et = datetime.now(ET)
+            time_to_expiry = market_end_time - current_time_et
+            expiry_hours = time_to_expiry.total_seconds() / 3600
+            
+            # Prioritize current market (typically has < 1 hour left) over next market (> 1 hour)
+            if expiry_hours <= 1.0:
+                return 1  # Current market gets highest priority
+            else:
+                return 2  # Next market gets lower priority
+        
+        return 3  # Unknown timing gets lowest priority
+        
     async def evaluate_market_opportunity(self, market: Market) -> Optional[Tuple[dict, float, dict]]:
         """Evaluate if a market presents a good market making opportunity"""
         
@@ -227,9 +311,25 @@ class MarketMakingStrategy:
             self.risk_manager.update_volatility_metrics(f"{market.condition_id}_A", orderbook_a)
             self.risk_manager.update_volatility_metrics(f"{market.condition_id}_B", orderbook_b)
             
-            # Check if spread is profitable
-            if combined_spread < self.config.min_spread_threshold:
-                self.logger.info(f"Combined spread too narrow for {market.market_slug}: {combined_spread:.4f} < {self.config.min_spread_threshold}")
+            # Check if spread is profitable - use dynamic threshold based on market timing
+            market_end_time = get_market_end_time_from_slug(market.market_slug)
+            if market_end_time:
+                current_time_et = datetime.now(ET)
+                time_to_expiry = market_end_time - current_time_et
+                expiry_hours = time_to_expiry.total_seconds() / 3600
+                
+                # For early market opportunities (within first 15-20 minutes of trading window)
+                # Use much lower spread threshold to capture uncertainty-based opportunities
+                if expiry_hours <= 1.0 and expiry_hours > 0.75:  # First 15 minutes of 1-hour window
+                    min_spread = 0.005  # 0.5% spread threshold for early opportunities
+                    self.logger.info(f"Early market opportunity window for {market.market_slug} - using reduced spread threshold: {min_spread:.3f}")
+                else:
+                    min_spread = self.config.min_spread_threshold
+            else:
+                min_spread = self.config.min_spread_threshold
+            
+            if combined_spread < min_spread:
+                self.logger.info(f"Combined spread too narrow for {market.market_slug}: {combined_spread:.4f} < {min_spread:.3f}")
                 return None
                 
             # Check risk conditions
