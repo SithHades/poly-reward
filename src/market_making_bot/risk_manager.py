@@ -209,7 +209,7 @@ class RiskManager:
         position_size = self.config.base_position_size
         
         # Adjust based on available balance
-        position_size = min(position_size, available_balance * 0.1)  # Max 10% of balance per position
+        position_size = min(position_size, max(available_balance * 0.1, 5.0))  # Max 10% of balance per position
         
         # Adjust based on time to expiry (smaller positions for shorter-term markets)
         if market.end_date_iso:

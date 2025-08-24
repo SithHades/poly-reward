@@ -157,7 +157,7 @@ class MarketMakingStrategy:
         self.logger.info(f"{market_info} - Passed all tradeability checks")
         return True
         
-    async def evaluate_market_opportunity(self, market: Market) -> Optional[Tuple[str, float, OrderbookSnapshot]]:
+    async def evaluate_market_opportunity(self, market: Market) -> Optional[Tuple[dict, float, dict]]:
         """Evaluate if a market presents a good market making opportunity"""
         
         self.markets_evaluated += 1
@@ -168,76 +168,110 @@ class MarketMakingStrategy:
                 self.logger.debug(f"Market {market.market_slug} has {len(market.tokens)} tokens, expected 2")
                 return None
                 
-            # For simplicity, focus on the first token (could be "Up" or "Yes")
-            token = market.tokens[0]
-            token_id = token.token_id
+            # Work with both tokens for proper binary market making
+            token_a = market.tokens[0]  # First token (e.g., "Up" or "Yes")
+            token_b = market.tokens[1]  # Second token (e.g., "Down" or "No")
             
-            # Get order book
-            order_book_summary = self.client.get_order_book(token_id)
+            # Get order books for both tokens
+            order_book_a = self.client.get_order_book(token_a.token_id)
+            order_book_b = self.client.get_order_book(token_b.token_id)
             
-            # Convert to our OrderbookSnapshot format
-            bids = [OrderbookLevel(price=float(bid['price']), size=float(bid['size'])) 
-                   for bid in order_book_summary.bids]
-            asks = [OrderbookLevel(price=float(ask['price']), size=float(ask['size'])) 
-                   for ask in order_book_summary.asks]
+            # Convert to our OrderbookSnapshot format for both tokens
+            def convert_orderbook(token_id, order_book):
+                bids = [OrderbookLevel(price=float(bid.price), size=float(bid.size)) 
+                       for bid in order_book.bids]
+                asks = [OrderbookLevel(price=float(ask.price), size=float(ask.size)) 
+                       for ask in order_book.asks]
+                
+                if not bids or not asks:
+                    return None
+                    
+                # Calculate spread and midpoint
+                best_bid = max(bid.price for bid in bids)  # Highest bid price
+                best_ask = min(ask.price for ask in asks)  # Lowest ask price
+                midpoint = (best_bid + best_ask) / 2
+                spread = best_ask - best_bid
+                
+                return OrderbookSnapshot(
+                    asset_id=token_id,
+                    bids=bids,
+                    asks=asks,
+                    midpoint=midpoint,
+                    spread=spread,
+                    timestamp=datetime.now()
+                )
             
-            if not bids or not asks:
+            orderbook_a = convert_orderbook(token_a.token_id, order_book_a)
+            orderbook_b = convert_orderbook(token_b.token_id, order_book_b)
+            
+            if not orderbook_a or not orderbook_b:
                 self.logger.debug(f"Incomplete order book for {market.market_slug}")
                 return None
-                
-            # Calculate spread and midpoint
-            best_bid = bids[0].price
-            best_ask = asks[0].price
-            midpoint = (best_bid + best_ask) / 2
-            spread = best_ask - best_bid
             
-            orderbook = OrderbookSnapshot(
-                asset_id=token_id,
-                bids=bids,
-                asks=asks,
-                midpoint=midpoint,
-                spread=spread,
-                timestamp=datetime.now()
-            )
+            # Check binary relationship: prices should roughly sum to 1.0
+            combined_midpoint = orderbook_a.midpoint + orderbook_b.midpoint
+            if abs(combined_midpoint - 1.0) > 0.1:  # Allow some tolerance for market inefficiency
+                self.logger.warning(f"Binary tokens don't sum to 1.0: {combined_midpoint:.4f} for {market.market_slug}")
             
-            # Update volatility metrics
-            self.risk_manager.update_volatility_metrics(market.condition_id, orderbook)
+            # Use the better spread of the two tokens for opportunity assessment
+            combined_spread = min(orderbook_a.spread, orderbook_b.spread)
+            combined_midpoint = (orderbook_a.midpoint + orderbook_b.midpoint) / 2
+            
+            self.logger.info(f"Market {market.market_slug} analysis:")
+            self.logger.info(f"  Token A ({token_a.outcome}): mid={orderbook_a.midpoint:.4f}, spread={orderbook_a.spread:.4f}")
+            self.logger.info(f"  Token B ({token_b.outcome}): mid={orderbook_b.midpoint:.4f}, spread={orderbook_b.spread:.4f}")
+            self.logger.info(f"  Combined: mid={combined_midpoint:.4f}, spread={combined_spread:.4f}")
+            self.logger.info(f"  Combined midpoint sum: {orderbook_a.midpoint + orderbook_b.midpoint:.4f}")
+            
+            # Update volatility metrics for both tokens
+            self.risk_manager.update_volatility_metrics(f"{market.condition_id}_A", orderbook_a)
+            self.risk_manager.update_volatility_metrics(f"{market.condition_id}_B", orderbook_b)
             
             # Check if spread is profitable
-            if spread < self.config.min_spread_threshold:
-                self.logger.debug(f"Spread too narrow for {market.market_slug}: {spread:.4f}")
+            if combined_spread < self.config.min_spread_threshold:
+                self.logger.info(f"Combined spread too narrow for {market.market_slug}: {combined_spread:.4f} < {self.config.min_spread_threshold}")
                 return None
                 
             # Check risk conditions
             if not self.risk_manager.can_enter_position(market, self.config.base_position_size):
-                self.logger.debug(f"Risk manager rejected {market.market_slug}")
+                self.logger.info(f"Risk manager rejected {market.market_slug}")
                 return None
                 
-            # Check market condition
+            # Check market condition (use token A as representative)
             market_condition = self.risk_manager.assess_market_condition(market.condition_id)
             if market_condition in [MarketCondition.VOLATILE, MarketCondition.UNAVAILABLE]:
-                self.logger.debug(f"Market condition unfavorable for {market.market_slug}: {market_condition}")
+                self.logger.info(f"Market condition unfavorable for {market.market_slug}: {market_condition}")
                 return None
                 
             self.profitable_spreads_found += 1
-            self.logger.info(f"Found opportunity in {market.market_slug}: spread={spread:.4f}, midpoint={midpoint:.4f}")
+            self.logger.info(f"Found binary opportunity in {market.market_slug}: spread={combined_spread:.4f}, combined_midpoint={combined_midpoint:.4f}")
+            self.logger.info(f"Token A ({token_a.outcome}): mid={orderbook_a.midpoint:.4f}, Token B ({token_b.outcome}): mid={orderbook_b.midpoint:.4f}")
             
-            return token_id, midpoint, orderbook
+            # Return both tokens and orderbooks
+            tokens_info = {
+                'token_a': {'token': token_a, 'orderbook': orderbook_a},
+                'token_b': {'token': token_b, 'orderbook': orderbook_b}
+            }
+            orderbooks_info = {'orderbook_a': orderbook_a, 'orderbook_b': orderbook_b}
+            
+            return tokens_info, combined_midpoint, orderbooks_info
             
         except Exception as e:
-            self.logger.error(f"Failed to evaluate market {market.market_slug}: {e}")
+            import traceback
+            self.logger.error(f"Failed to evaluate market {market.market_slug}: {e}\nStack trace:\n{traceback.format_exc()}")
             return None
             
-    async def execute_market_making(self, market: Market, token_id: str, orderbook: OrderbookSnapshot):
-        """Execute market making strategy for a specific market"""
+    async def execute_market_making(self, market: Market, tokens_info: dict, orderbooks_info: dict):
+        """Execute market making strategy for a binary market with both tokens"""
         
         try:
             # Calculate position size based on risk management
             available_balance = self._get_available_balance()
             position_size = self.risk_manager.get_position_size_for_market(market, available_balance)
             
-            # Get tick size for the market
-            tick_size = self.client.get_tick_size(token_id)
+            # Get tick size for both tokens (use the first token as reference)
+            token_a = tokens_info['token_a']['token']
+            tick_size = self.client.get_tick_size(token_a.token_id)
             if tick_size == 0:
                 tick_size = market.minimum_tick_size or 0.001
                 
@@ -248,28 +282,28 @@ class MarketMakingStrategy:
                 if existing_orders:
                     last_order = max(existing_orders, key=lambda x: x.created_at)
                     if self.risk_manager.should_refresh_orders(market.condition_id, last_order.created_at):
-                        self.logger.info(f"Refreshing orders for {market.market_slug}")
-                        orders = self.order_manager.refresh_market_orders(
-                            market.condition_id, token_id, orderbook, position_size, tick_size
+                        self.logger.info(f"Refreshing binary orders for {market.market_slug}")
+                        orders = self.order_manager.refresh_binary_market_orders(
+                            market.condition_id, tokens_info, orderbooks_info, position_size, tick_size
                         )
                         self.orders_placed += len(orders)
                     else:
                         self.logger.debug(f"Orders for {market.market_slug} don't need refreshing yet")
                 else:
                     # No existing orders, place new ones
-                    orders = self.order_manager.place_market_making_orders(
-                        market.condition_id, token_id, orderbook, position_size, tick_size
+                    orders = self.order_manager.place_binary_market_making_orders(
+                        market.condition_id, tokens_info, orderbooks_info, position_size, tick_size
                     )
                     self.orders_placed += len(orders)
             else:
                 # No existing orders, place new ones
-                orders = self.order_manager.place_market_making_orders(
-                    market.condition_id, token_id, orderbook, position_size, tick_size
+                orders = self.order_manager.place_binary_market_making_orders(
+                    market.condition_id, tokens_info, orderbooks_info, position_size, tick_size
                 )
                 self.orders_placed += len(orders)
                 
         except Exception as e:
-            self.logger.error(f"Failed to execute market making for {market.market_slug}: {e}")
+            self.logger.error(f"Failed to execute binary market making for {market.market_slug}: {e}")
             
     async def run_strategy_cycle(self):
         """Run one complete cycle of the market making strategy"""
@@ -325,8 +359,8 @@ class MarketMakingStrategy:
                     # Evaluate market opportunity
                     opportunity = await self.evaluate_market_opportunity(market)
                     if opportunity:
-                        token_id, midpoint, orderbook = opportunity
-                        await self.execute_market_making(market, token_id, orderbook)
+                        tokens_info, combined_midpoint, orderbooks_info = opportunity
+                        await self.execute_market_making(market, tokens_info, orderbooks_info)
                     else:
                         # If no opportunity but we have orders, consider cancelling them
                         if self.order_manager.has_active_orders(market_id):

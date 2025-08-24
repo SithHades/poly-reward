@@ -101,13 +101,144 @@ class OrderManager:
             
         return final_bid, final_ask
         
+    def place_binary_market_making_orders(self,
+                                        market_id: str,
+                                        tokens_info: dict, 
+                                        orderbooks_info: dict,
+                                        position_size: float,
+                                        tick_size: float) -> List[str]:
+        """Place binary market making orders using complement token strategy"""
+        
+        token_a = tokens_info['token_a']['token']
+        token_b = tokens_info['token_b']['token']
+        orderbook_a = orderbooks_info['orderbook_a']
+        orderbook_b = orderbooks_info['orderbook_b']
+        
+        # Calculate market making prices for both tokens
+        bid_price_a, ask_price_a = self.calculate_market_making_prices(
+            orderbook_a, tick_size, self.config.target_profit_margin
+        )
+        bid_price_b, ask_price_b = self.calculate_market_making_prices(
+            orderbook_b, tick_size, self.config.target_profit_margin
+        )
+        
+        if not all([bid_price_a, ask_price_a, bid_price_b, ask_price_b]):
+            self.logger.info(f"Skipping binary order placement for {market_id} - no profitable prices")
+            return []
+            
+        placed_orders = []
+        
+        # Strategy: Place BUY orders directly, use complement token BUY for "selling"
+        # This way we only buy tokens, never sell tokens we don't have
+        
+        # Order 1: BUY Token A at bid price (we want to buy A when it's undervalued)
+        if not self.config.dry_run:
+            try:
+                buy_a_order_args = OrderArgsModel(
+                    token_id=token_a.token_id,
+                    price=bid_price_a,
+                    size=position_size,
+                    side=BookSide.BUY
+                )
+                buy_a_order = self.client.create_order(buy_a_order_args)
+                buy_a_order_id = self.client.place_order(buy_a_order)
+                
+                if buy_a_order_id:
+                    active_order = ActiveOrder(
+                        order_id=buy_a_order_id,
+                        market_id=market_id,
+                        token_id=token_a.token_id,
+                        side=BookSide.BUY,
+                        price=bid_price_a,
+                        size=position_size,
+                        created_at=datetime.now()
+                    )
+                    
+                    self.active_orders[buy_a_order_id] = active_order
+                    if market_id not in self.market_orders:
+                        self.market_orders[market_id] = []
+                    self.market_orders[market_id].append(buy_a_order_id)
+                    placed_orders.append(buy_a_order_id)
+                    self.orders_placed_today += 1
+                    
+                    self.logger.info(f"Placed BUY order on {token_a.outcome} {buy_a_order_id}: {position_size} @ {bid_price_a}")
+                    
+            except Exception as e:
+                self.logger.error(f"Failed to place buy order for Token A {market_id}: {e}")
+        else:
+            self.logger.info(f"DRY RUN: Would place BUY order on {token_a.outcome}: {position_size} @ {bid_price_a}")
+            
+        # Order 2: Instead of SELLING Token A at ask price, BUY Token B at complement price
+        # If Token A ask price is X, then we buy Token B at (1-X) to achieve the same effect
+        complement_price_b = 1.0 - ask_price_a
+        complement_price_b = max(0.001, min(0.999, complement_price_b))  # Clamp to valid range
+        complement_price_b = round(complement_price_b / tick_size) * tick_size  # Round to tick size
+        
+        if not self.config.dry_run:
+            try:
+                # Buy Token B at complement price (equivalent to selling Token A)
+                complement_b_order_args = OrderArgsModel(
+                    token_id=token_b.token_id,
+                    price=complement_price_b,
+                    size=position_size,
+                    side=BookSide.BUY
+                )
+                complement_b_order = self.client.create_order(complement_b_order_args)
+                complement_b_order_id = self.client.place_order(complement_b_order)
+                
+                if complement_b_order_id:
+                    active_order = ActiveOrder(
+                        order_id=complement_b_order_id,
+                        market_id=market_id,
+                        token_id=token_b.token_id,
+                        side=BookSide.BUY,  # This is a BUY order on Token B
+                        price=complement_price_b,
+                        size=position_size,
+                        created_at=datetime.now()
+                    )
+                    
+                    self.active_orders[complement_b_order_id] = active_order
+                    if market_id not in self.market_orders:
+                        self.market_orders[market_id] = []
+                    self.market_orders[market_id].append(complement_b_order_id)
+                    placed_orders.append(complement_b_order_id)
+                    self.orders_placed_today += 1
+                    
+                    self.logger.info(f"Placed COMPLEMENT BUY order on {token_b.outcome} {complement_b_order_id}: {position_size} @ {complement_price_b} (equivalent to selling {token_a.outcome} @ {ask_price_a})")
+                    
+            except Exception as e:
+                self.logger.error(f"Failed to place complement buy order for Token B {market_id}: {e}")
+        else:
+            self.logger.info(f"DRY RUN: Would place COMPLEMENT BUY order on {token_b.outcome}: {position_size} @ {complement_price_b} (equivalent to selling {token_a.outcome} @ {ask_price_a})")
+            
+        return placed_orders
+        
+    def refresh_binary_market_orders(self,
+                                   market_id: str,
+                                   tokens_info: dict,
+                                   orderbooks_info: dict,
+                                   position_size: float,
+                                   tick_size: float) -> List[str]:
+        """Cancel existing orders and place new binary orders for a market"""
+        
+        # Cancel existing orders for this market
+        cancelled_orders = self.cancel_market_orders(market_id)
+        self.logger.info(f"Cancelled {len(cancelled_orders)} orders for binary market {market_id}")
+        
+        # Place new binary orders
+        new_orders = self.place_binary_market_making_orders(
+            market_id, tokens_info, orderbooks_info, position_size, tick_size
+        )
+        
+        return new_orders
+        
     def place_market_making_orders(self,
                                   market_id: str,
                                   token_id: str, 
                                   orderbook: OrderbookSnapshot,
                                   position_size: float,
                                   tick_size: float) -> List[str]:
-        """Place both bid and ask orders for market making"""
+        """Legacy method - place both bid and ask orders on single token for backward compatibility"""
         
         bid_price, ask_price = self.calculate_market_making_prices(
             orderbook, tick_size, self.config.target_profit_margin
@@ -149,12 +280,12 @@ class OrderManager:
                     placed_orders.append(buy_order_id)
                     self.orders_placed_today += 1
                     
-                    self.logger.info(f"Placed BUY order {buy_order_id}: {position_size} @ {bid_price}")
+                    self.logger.info(f"Placed LEGACY BUY order {buy_order_id}: {position_size} @ {bid_price}")
                     
             except Exception as e:
                 self.logger.error(f"Failed to place buy order for {market_id}: {e}")
         else:
-            self.logger.info(f"DRY RUN: Would place BUY order: {position_size} @ {bid_price}")
+            self.logger.info(f"DRY RUN: Would place LEGACY BUY order: {position_size} @ {bid_price}")
             
         # Place sell order
         if not self.config.dry_run:
@@ -186,12 +317,12 @@ class OrderManager:
                     placed_orders.append(sell_order_id)
                     self.orders_placed_today += 1
                     
-                    self.logger.info(f"Placed SELL order {sell_order_id}: {position_size} @ {ask_price}")
+                    self.logger.info(f"Placed LEGACY SELL order {sell_order_id}: {position_size} @ {ask_price}")
                     
             except Exception as e:
                 self.logger.error(f"Failed to place sell order for {market_id}: {e}")
         else:
-            self.logger.info(f"DRY RUN: Would place SELL order: {position_size} @ {ask_price}")
+            self.logger.info(f"DRY RUN: Would place LEGACY SELL order: {position_size} @ {ask_price}")
             
         return placed_orders
         
