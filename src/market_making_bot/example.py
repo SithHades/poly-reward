@@ -24,7 +24,7 @@ async def run_conservative_bot():
         # Conservative trading parameters
         base_position_size=5.0,          # Small position sizes
         max_position_size=10.0,           # Low max per market
-        min_spread_threshold=0.025,       # Only trade markets with >2.5% spread
+        min_spread_threshold=0.015,       # Only trade markets with >1.5% spread (was 2.5%, too high)
         target_profit_margin=0.010,       # Target 1% profit per trade
         
         # Conservative risk management
@@ -41,7 +41,7 @@ async def run_conservative_bot():
         # Safety settings
         dry_run=True,                     # Start in dry run mode
         market_close_buffer_minutes=10,   # Stop trading 10 min before close
-        min_time_to_expiry_hours=1.0,     # Only trade markets >1hr from expiry
+        min_time_to_expiry_hours=0.083,   # Only trade markets >5min from expiry (was 1.0hr, too restrictive)
         
         # Logging
         enable_logging=True,
@@ -93,7 +93,7 @@ async def run_aggressive_bot():
         # Safety settings
         dry_run=True,                     # Still start in dry run
         market_close_buffer_minutes=5,    # Trade closer to close
-        min_time_to_expiry_hours=0.5,     # Trade shorter-term markets
+        min_time_to_expiry_hours=0.083,   # Trade very close to expiry (>5min only)
         
         # Logging
         enable_logging=True,

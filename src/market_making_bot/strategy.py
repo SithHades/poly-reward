@@ -38,6 +38,10 @@ class MarketMakingStrategy:
         """Find active hourly prediction markets for the configured crypto, prioritizing current market"""
         
         try:
+            # Debug: show current time
+            current_time_et = datetime.now(ET)
+            self.logger.info(f"Current time ET: {current_time_et}")
+            
             # Get current and next market slugs
             current_slug = get_current_market_slug(self.config.crypto)
             next_slug = get_next_market_slug(self.config.crypto)
@@ -49,9 +53,15 @@ class MarketMakingStrategy:
             # Try to get current market first (highest priority)
             try:
                 current_market = self.client.get_market_by_slug(current_slug)
-                if current_market and self._is_market_tradeable(current_market):
-                    active_markets.append(current_market)
-                    self.logger.info(f"Found active current market: {current_market.market_slug}")
+                if current_market:
+                    self.logger.info(f"Successfully fetched current market: {current_market.market_slug}")
+                    if self._is_market_tradeable(current_market):
+                        active_markets.append(current_market)
+                        self.logger.info(f"Found active current market: {current_market.market_slug}")
+                    else:
+                        self.logger.warning(f"Current market {current_market.market_slug} failed tradeability checks")
+                else:
+                    self.logger.warning(f"Current market {current_slug} returned None")
             except Exception as e:
                 self.logger.warning(f"Could not fetch current market {current_slug}: {e}")
                 
@@ -102,22 +112,23 @@ class MarketMakingStrategy:
         """Check if a market is suitable for trading with detailed logging"""
         
         market_info = f"Market {market.market_slug}"
+        self.logger.info(f"Checking tradeability for {market_info}")
         
         # Basic market status checks
         if not market.active:
-            self.logger.debug(f"{market_info} - Not active")
+            self.logger.warning(f"{market_info} - Not active (active={market.active})")
             return False
         
         if market.closed:
-            self.logger.debug(f"{market_info} - Closed")
+            self.logger.warning(f"{market_info} - Closed (closed={market.closed})")
             return False
             
         if market.archived:
-            self.logger.debug(f"{market_info} - Archived")
+            self.logger.warning(f"{market_info} - Archived (archived={market.archived})")
             return False
             
         if not market.accepting_orders:
-            self.logger.debug(f"{market_info} - Not accepting orders")
+            self.logger.warning(f"{market_info} - Not accepting orders (accepting_orders={market.accepting_orders})")
             return False
             
         # Check if market has order book enabled (less strict - warn instead of block)
